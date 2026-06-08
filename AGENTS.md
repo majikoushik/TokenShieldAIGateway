@@ -4,6 +4,26 @@
 
 **TokenShield AI Gateway**
 
+## Agent Operating Mode
+
+This file is the permanent project contract for AI coding agents such as Codex, Cursor, Windsurf, Claude Code, or similar tools.
+
+Agents must read and follow this file before making changes. Individual prompts should not repeat this file. Feature prompts should describe the desired outcome, acceptance criteria, and explicit exclusions only.
+
+The preferred build style is **epic-based vertical-slice implementation**, not micro-task implementation. A vertical slice may include database, backend API, frontend UI, tests, and documentation when they are part of the same product outcome.
+
+Agents must optimize for:
+
+1. Working end-to-end product behavior
+2. Production-minded architecture
+3. Security and privacy by default
+4. Tenant isolation
+5. Maintainable code
+6. Clear tests and documentation
+7. Minimal unnecessary complexity
+
+---
+
 ## Product Vision
 
 TokenShield AI Gateway is a production-grade AI FinOps and model-routing platform for enterprises.
@@ -25,33 +45,81 @@ TokenShield AI Gateway
         |-- Blocked request
 ```
 
-The MVP must focus on:
+The product must help enterprise teams answer these questions:
+
+1. Which applications are spending the most on AI?
+2. Which models are being used and why?
+3. Are developers using premium models unnecessarily?
+4. Can low-risk requests be routed to cheaper models?
+5. Are budgets being enforced before provider cost is incurred?
+6. Can provider failures be handled with controlled fallback?
+7. Can AI usage be audited without storing sensitive prompts or responses?
+
+---
+
+## MVP Scope
+
+The MVP must include:
 
 1. OpenAI-compatible AI gateway API
-2. Model catalog
-3. Three model tiers: cheap, standard, premium
-4. Rule-based model routing
-5. Budget enforcement
-6. Token and cost calculation
-7. Provider adapters for Azure OpenAI, OpenAI, and Anthropic
-8. Admin console
-9. Usage dashboard
-10. API key management
-11. Audit logs
-12. Azure-ready deployment
+2. API key authentication for client applications
+3. Tenant-aware model provider catalog
+4. AI model catalog
+5. Three model tiers: `cheap`, `standard`, `premium`
+6. Rule-based model routing
+7. Request profiling
+8. Token estimation
+9. Cost calculation
+10. Budget enforcement
+11. Provider adapters for Azure OpenAI, OpenAI, Anthropic, and mock provider
+12. Fallback logic
+13. Usage logging
+14. Audit logging
+15. Admin APIs
+16. Next.js admin console
+17. Usage dashboard
+18. API key management
+19. Observability
+20. Docker Compose local development
+21. Azure-ready deployment foundation
+22. CI/CD foundation
+
+---
+
+## Out of Scope for MVP
+
+Do not implement these unless explicitly requested:
+
+1. Streaming responses
+2. Semantic cache
+3. Prompt compression
+4. LLM-based router
+5. ML-based cost optimizer
+6. Stripe billing
+7. Full SAML/SSO implementation
+8. Microsoft Entra ID implementation beyond placeholders
+9. Kubernetes / AKS / Helm deployment
+10. Complex approval workflow
+11. Fine-tuning
+12. Prompt marketplace
+13. Multi-region active-active deployment
+14. Air-gapped deployment
+15. Advanced prompt injection detection
+16. Full data residency policy engine
+17. Redis or Service Bus unless specifically requested
 
 ---
 
 ## Technology Stack
 
-Use the following stack unless explicitly instructed otherwise.
+Use this stack unless a prompt explicitly changes it.
 
 ### Frontend
 
 - Next.js
 - TypeScript
 - Tailwind CSS
-- shadcn/ui
+- shadcn/ui-compatible component structure
 - TanStack Query
 - TanStack Table
 - React Hook Form
@@ -62,7 +130,7 @@ Use the following stack unless explicitly instructed otherwise.
 
 - .NET 8 Web API
 - C#
-- ASP.NET Core Controllers
+- ASP.NET Core Controllers or Minimal APIs where consistent with the existing codebase
 - Entity Framework Core
 - PostgreSQL
 - FluentValidation
@@ -75,15 +143,14 @@ Use the following stack unless explicitly instructed otherwise.
 ### Database
 
 - PostgreSQL
-- Use EF Core migrations
-- Use JSONB-compatible columns where needed
-- Use `Guid` primary keys
-- Use `CreatedAt` and `UpdatedAt`
-- Use soft delete where appropriate
+- EF Core migrations
+- JSONB-compatible columns where useful
+- `Guid` primary keys
+- `CreatedAtUtc` and `UpdatedAtUtc` timestamps
+- Soft delete where appropriate
+- `decimal` for money and cost values
 
-### Azure Infrastructure
-
-Target infrastructure:
+### Azure Target
 
 - Azure Container Apps
 - Azure API Management
@@ -93,26 +160,20 @@ Target infrastructure:
 - Azure Monitor
 - Log Analytics Workspace
 - Azure Container Registry
-- Azure Cache for Redis later
-- Azure Service Bus later
 
 ### Local Development
 
-Use Docker Compose for local development.
-
-Local services should include:
+Docker Compose should support:
 
 - PostgreSQL
 - gateway-api
 - web-admin
 
-Redis and Service Bus can be added later.
-
 ---
 
 ## Repository Structure
 
-Use this structure:
+Use this structure unless the existing repository already has an equivalent structure.
 
 ```text
 /
@@ -124,12 +185,15 @@ Use this structure:
 │   ├── product-spec.md
 │   ├── architecture.md
 │   ├── database-schema.md
+│   ├── gateway-api.md
 │   ├── routing-rules.md
 │   ├── cost-engine.md
-│   ├── provider-azure-openai.md
-│   ├── provider-openai.md
-│   ├── provider-anthropic.md
-│   └── observability.md
+│   ├── provider-adapters.md
+│   ├── budget-enforcement.md
+│   ├── admin-api.md
+│   ├── frontend-admin-console.md
+│   ├── observability.md
+│   └── deployment.md
 │
 ├── infra/
 │   ├── bicep/
@@ -137,8 +201,10 @@ Use this structure:
 │   └── README.md
 │
 ├── scripts/
-│
+├── .github/
+│   └── workflows/
 ├── AGENTS.md
+├── docker-compose.yml
 └── README.md
 ```
 
@@ -146,7 +212,7 @@ Use this structure:
 
 ## Backend Architecture
 
-The backend should follow Clean Architecture principles.
+The backend must follow Clean Architecture principles.
 
 Recommended backend structure:
 
@@ -174,13 +240,16 @@ apps/gateway-api/
 
 Responsible for:
 
-- Controllers
+- Controllers or endpoint definitions
 - Middleware
-- API key authentication
 - Request validation
-- Swagger
+- API key authentication
+- Swagger/OpenAPI
 - Health checks
 - Dependency injection setup
+- HTTP response shaping
+
+Controllers must stay thin. Business logic must live in application/domain services.
 
 #### TokenShield.Domain
 
@@ -188,9 +257,9 @@ Responsible for:
 
 - Domain entities
 - Value objects
-- Domain constants
 - Enums
-- Core business rules
+- Domain constants
+- Core business rules that do not depend on infrastructure
 
 #### TokenShield.Application
 
@@ -199,9 +268,10 @@ Responsible for:
 - Use cases
 - DTOs
 - Interfaces
-- Request profiling
+- Request profiling orchestration
 - Routing orchestration
 - Budget orchestration
+- Gateway orchestration
 - Application services
 
 #### TokenShield.Infrastructure
@@ -209,21 +279,25 @@ Responsible for:
 Responsible for:
 
 - EF Core DbContext
-- EF Core configurations
+- Entity configurations
+- Migrations
 - Repository implementations if needed
 - PostgreSQL integration
-- Key Vault integration later
+- Key Vault integration placeholders
 - Application settings
 
 #### TokenShield.ProviderAdapters
 
 Responsible for:
 
+- Provider abstraction
 - Azure OpenAI adapter
 - OpenAI adapter
 - Anthropic adapter
 - Mock provider adapter
 - Provider adapter factory
+
+Controllers must never call provider SDKs directly.
 
 #### TokenShield.PolicyEngine
 
@@ -233,6 +307,7 @@ Responsible for:
 - Rule matching
 - Condition parsing
 - Action selection
+- Explainable routing decisions
 
 #### TokenShield.CostEngine
 
@@ -241,16 +316,16 @@ Responsible for:
 - Token estimation
 - Token usage calculation
 - Cost calculation
-- Budget checks
+- Budget-related calculation helpers
 
 #### TokenShield.Guardrails
 
 Responsible for:
 
-- PII detection
-- Secret detection
-- Prompt safety checks
-- Future prompt injection checks
+- Simple PII detection
+- Secret detection placeholders
+- Prompt safety placeholders
+- Future prompt-injection checks
 
 #### TokenShield.Observability
 
@@ -266,7 +341,7 @@ Responsible for:
 
 ## Frontend Architecture
 
-The frontend should be a modern SaaS admin console.
+The frontend must be a polished SaaS admin console.
 
 Recommended structure:
 
@@ -282,12 +357,14 @@ apps/web-admin/
 │   ├── budgets/
 │   ├── api-keys/
 │   ├── usage-logs/
+│   ├── audit-logs/
 │   └── shared/
 │
 ├── lib/
 │   ├── api/
 │   ├── auth/
 │   ├── constants/
+│   ├── mock/
 │   └── utils/
 │
 ├── hooks/
@@ -295,7 +372,7 @@ apps/web-admin/
 └── styles/
 ```
 
-Frontend pages required for MVP:
+Required MVP pages:
 
 1. Dashboard
 2. Providers
@@ -306,6 +383,20 @@ Frontend pages required for MVP:
 7. API Keys
 8. Audit Logs
 9. Settings
+
+Frontend UX must include:
+
+- sidebar navigation
+- top header
+- metric cards
+- charts
+- tables
+- filters
+- create/edit forms using modals or side panels
+- loading states
+- empty states
+- error states
+- toast notifications where useful
 
 ---
 
@@ -319,49 +410,28 @@ A company or organization using TokenShield.
 
 An application owned by a tenant that sends AI requests through the gateway.
 
-Example:
+Examples:
 
-```text
-Fraud Investigation App
-Customer Support Bot
-Internal Developer Assistant
-```
+- Fraud Investigation App
+- Customer Support Bot
+- Internal Developer Assistant
 
 ### Provider
 
 An AI provider.
 
-Examples:
-
-```text
-Azure OpenAI
-OpenAI
-Anthropic
-Google Gemini
-AWS Bedrock
-Ollama
-```
-
-For the MVP, implement:
+MVP providers:
 
 1. Azure OpenAI
 2. OpenAI
 3. Anthropic
 4. Mock provider
 
+Future providers may include Gemini, Bedrock, and Ollama.
+
 ### AI Model
 
-A model registered under a provider.
-
-Example:
-
-```text
-gpt-mini
-gpt-standard
-gpt-premium
-claude-sonnet
-claude-opus
-```
+A model registered under a provider. Models have pricing, context window, capabilities, status, and provider-specific deployment name.
 
 ### Model Tier
 
@@ -377,45 +447,49 @@ premium
 
 ### Routing Rule
 
-A tenant-defined rule that decides which tier or action should be used.
+A tenant-defined rule that decides which action should be taken for a request.
 
-Example:
+Supported MVP actions:
 
-```text
-IF taskType = summarization
-AND riskLevel = low
-THEN routeToTier = cheap
-```
+1. Route to tier
+2. Human review
+3. Block
 
 ### Budget Limit
 
-A monthly spend limit for an application, API key, model, or tenant.
+A monthly spend limit for tenant, application, API key, or model scope.
+
+Supported MVP budget actions:
+
+1. Warn only
+2. Block
+3. Downgrade
 
 ### AI Request Log
 
-A record of every AI request processed through the gateway.
+A privacy-preserving record of an AI request processed through the gateway.
 
 Do not store raw prompt or raw response by default.
 
-Store:
+Store metadata such as:
 
-- Prompt hash
-- Response hash
-- Token counts
-- Estimated cost
-- Selected model
-- Selected provider
-- Matched rule
-- Fallback status
-- Budget status
-- Latency
-- Timestamp
+- prompt hash
+- response hash
+- token counts
+- estimated cost
+- selected provider
+- selected model
+- selected tier
+- matched rule
+- fallback status
+- budget status
+- latency
+- request status
+- timestamp
 
 ---
 
-## API Design Requirements
-
-### Gateway Endpoint
+## Gateway API Contract
 
 The main gateway endpoint must be OpenAI-compatible.
 
@@ -423,7 +497,19 @@ The main gateway endpoint must be OpenAI-compatible.
 POST /v1/chat/completions
 ```
 
-The request should support:
+MVP behavior:
+
+1. Require `x-api-key` authentication.
+2. Support `model: "auto"` for routed mode.
+3. Support `stream: false` only.
+4. Return a clear validation error for `stream: true`.
+5. Accept OpenAI-style `messages`.
+6. Accept optional `metadata` for routing/profile signals.
+7. Return OpenAI-compatible response shape.
+8. Include routing metadata in the response.
+9. Do not log raw prompts or responses.
+
+Example request:
 
 ```json
 {
@@ -446,14 +532,7 @@ The request should support:
 }
 ```
 
-For MVP:
-
-- Support `stream: false` only.
-- Return a clear validation error if `stream: true`.
-- Support `model: "auto"` for routed mode.
-- Support explicit model name later.
-
-The response should follow OpenAI-compatible shape and include routing metadata.
+Example response:
 
 ```json
 {
@@ -490,12 +569,18 @@ The response should follow OpenAI-compatible shape and include routing metadata.
 
 ---
 
-## API Key Authentication
+## API Key Authentication Contract
 
-Client applications must authenticate using:
+Client applications authenticate using:
 
 ```http
 x-api-key: ts_live_xxxxxx
+```
+
+Development keys may use:
+
+```http
+x-api-key: ts_dev_xxxxxx
 ```
 
 Rules:
@@ -503,43 +588,15 @@ Rules:
 1. Never store raw API keys.
 2. Store only hashed API keys.
 3. Show raw API key only once during creation.
-4. Resolve `TenantId` and `ApplicationId` from API key.
-5. Reject missing or invalid API keys with `401 Unauthorized`.
-6. Add `LastUsedAt` when a key is used.
-7. Add API key status: active, revoked, expired.
+4. Never log raw API keys.
+5. Resolve `TenantId`, `ClientApplicationId`, and `ApiKeyId` from the key.
+6. Reject missing, invalid, revoked, or expired API keys.
+7. Update `LastUsedAtUtc` when a key is successfully used.
+8. Keep authentication middleware reusable for all `/v1` gateway routes.
 
 ---
 
-## Admin API Requirements
-
-Create admin APIs for:
-
-1. Providers
-2. Models
-3. Model tiers
-4. Routing rules
-5. Budgets
-6. API keys
-7. Usage analytics
-8. Audit logs
-
-For MVP, admin authentication may be a clearly marked placeholder, but the code must be structured so Microsoft Entra ID can be added later.
-
-All admin mutation endpoints must write audit logs.
-
-Mutation means:
-
-- Create
-- Update
-- Delete
-- Enable
-- Disable
-- Revoke
-- Publish
-
----
-
-## Routing Engine Requirements
+## Routing Engine Contract
 
 The routing engine must be rule-based for MVP.
 
@@ -548,19 +605,17 @@ Execution order:
 1. Authenticate request.
 2. Estimate input tokens.
 3. Build request profile.
-4. Check PII placeholder.
-5. Check budget.
+4. Run guardrail placeholders.
+5. Check budget pre-call.
 6. Match routing rules.
 7. Select model tier.
-8. Select model.
-9. Call provider.
+8. Select concrete model.
+9. Call provider adapter.
 10. Calculate final cost.
-11. Log request.
-12. Return response.
+11. Apply post-call usage logging.
+12. Return OpenAI-compatible response.
 
-### Supported Rule Conditions
-
-Implement these condition fields:
+Supported rule fields:
 
 ```text
 taskType
@@ -583,7 +638,7 @@ greaterThanOrEquals
 lessThanOrEquals
 ```
 
-### Supported Rule Actions
+Supported actions:
 
 ```text
 routeToTier
@@ -591,29 +646,18 @@ humanReview
 block
 ```
 
-### Default Behavior
+Default behavior:
 
-If no rule matches:
-
-```text
-routeToTier = standard
-```
-
-If `riskLevel = high`:
-
-```text
-humanReview
-```
-
-unless an explicit approved rule allows routing.
+1. If no rule matches, route to `standard`.
+2. If `riskLevel = high`, require human review unless an explicit approved rule allows routing.
 
 ---
 
-## Request Profiling Requirements
+## Request Profiling Contract
 
 Create a request profile for every AI request.
 
-Fields:
+Profile fields:
 
 ```text
 TaskType
@@ -631,11 +675,9 @@ Environment
 Rules:
 
 1. Prefer metadata values when provided.
-2. If `taskType` is missing, infer using keyword rules.
+2. If `taskType` is missing, infer using simple keyword rules.
 3. If `riskLevel` is missing, default to `medium`.
-4. Detect simple PII using regex:
-   - email address
-   - phone-like number
+4. Detect simple PII using regex for email and phone-like values.
 5. Complexity score:
    - base 20
    - +20 if input tokens > 4000
@@ -645,19 +687,9 @@ Rules:
 
 ---
 
-## Cost Engine Requirements
+## Cost Engine Contract
 
-Create:
-
-```text
-ITokenEstimator
-ICostCalculator
-IBudgetService
-```
-
-### Token Estimation
-
-For MVP, use approximation:
+For MVP token estimation:
 
 ```text
 1 token ≈ 4 characters
@@ -665,9 +697,7 @@ For MVP, use approximation:
 
 Count all message content.
 
-### Cost Calculation
-
-Model prices should be stored as:
+Model prices must be stored as:
 
 ```text
 InputTokenPricePerMillion
@@ -682,18 +712,22 @@ outputCost = outputTokens / 1,000,000 * outputTokenPrice
 totalCost = inputCost + outputCost
 ```
 
-Use decimal for money.
+Rules:
 
-Never use floating point for cost storage.
+1. Use `decimal` for money.
+2. Never use floating point for persisted cost values.
+3. Store enough metadata to explain how cost was calculated.
 
 ---
 
-## Budget Requirements
+## Budget Contract
 
 For MVP, support monthly budgets for:
 
-1. Client application
-2. API key
+1. Tenant
+2. Client application
+3. API key
+4. Model
 
 Budget actions:
 
@@ -705,61 +739,47 @@ downgrade
 
 Threshold behavior:
 
-1. If usage reaches 80%, include warning metadata.
-2. If hard limit is exceeded and action is `block`, do not call provider.
-3. If action is `downgrade`, try a cheaper tier if possible.
+1. If usage reaches warning threshold, include warning metadata and log the decision.
+2. If hard limit is exceeded and action is `block`, do not call the provider.
+3. If action is `downgrade`, try a cheaper tier if available.
 4. Log all budget decisions.
 
 ---
 
-## Provider Adapter Requirements
+## Provider Adapter Contract
 
-All providers must implement:
+All providers must implement a common abstraction equivalent to:
 
 ```csharp
-public interface IModelProviderAdapter
-{
-    Task<ModelResponse> CompleteChatAsync(
-        ModelRequest request,
-        CancellationToken cancellationToken);
-}
+Task<ModelResponse> CompleteChatAsync(ModelRequest request, CancellationToken cancellationToken);
 ```
 
 Required adapters:
 
-1. MockModelProviderAdapter
-2. AzureOpenAiProviderAdapter
-3. OpenAiProviderAdapter
-4. AnthropicProviderAdapter
+1. Mock provider
+2. Azure OpenAI
+3. OpenAI
+4. Anthropic
 
 Rules:
 
 1. Controllers must not call provider SDKs directly.
-2. Use `ModelProviderAdapterFactory`.
-3. Provider credentials must come from secure configuration or Key Vault later.
-4. Do not store raw API keys in the database.
-5. Real provider calls must be controlled by configuration:
-
-```json
-{
-  "ProviderCalls": {
-    "EnableRealProviderCalls": false
-  }
-}
-```
-
-When disabled, use the mock provider.
+2. Use a provider adapter factory or equivalent provider selection mechanism.
+3. Provider credentials must come from secure configuration or secret references.
+4. Do not store raw provider keys in the database.
+5. Real provider calls must be controlled by configuration.
+6. When real calls are disabled, use the mock provider.
 
 ---
 
-## Fallback Requirements
+## Fallback Contract
 
-Use Polly for resilience.
+Use Polly or equivalent .NET resilience patterns.
 
 Required behavior:
 
 1. Retry transient provider errors once.
-2. If model fails, try another model in the same tier if available.
+2. If a model fails, try another model in the same tier if available.
 3. If still failing, try configured fallback tier.
 4. If fallback succeeds, mark `FallbackUsed = true`.
 5. If fallback fails, return a controlled error.
@@ -768,31 +788,64 @@ Required behavior:
 
 ---
 
-## Security Rules
+## Admin API Contract
 
-Follow these rules strictly:
+Create tenant-aware admin APIs for:
+
+1. Providers
+2. Models
+3. Model tiers
+4. Routing rules
+5. Budgets
+6. API keys
+7. Usage analytics
+8. Audit logs
+9. Settings where needed
+
+MVP admin authentication may be a clearly marked placeholder, but code must be structured so Microsoft Entra ID can be added later.
+
+All admin mutation endpoints must write audit logs.
+
+Mutation means:
+
+- create
+- update
+- delete
+- enable
+- disable
+- revoke
+- publish
+
+Do not expose EF entities directly from API responses.
+
+---
+
+## Security and Privacy Rules
+
+These rules are mandatory.
 
 1. Never store raw API keys.
 2. Never log raw API keys.
 3. Never log raw prompts by default.
 4. Never log raw responses by default.
-5. Store prompt hash and response hash instead.
+5. Store prompt hash and response hash instead of raw content.
 6. Use safe error messages.
-7. Use validation on all public endpoints.
-8. Use tenant isolation in all queries.
-9. Add indexes on tenant-scoped columns.
+7. Validate all public inputs.
+8. Enforce tenant isolation in all tenant-scoped queries.
+9. Add indexes on tenant-scoped query columns.
 10. Store provider credentials only as secret references.
 11. Prepare for Azure Key Vault integration.
-12. Add CORS configuration explicitly. Do not allow all origins in production.
-13. All admin mutations must produce audit logs.
+12. Configure CORS explicitly.
+13. Do not allow all origins in production.
+14. All admin mutations must produce audit logs.
+15. Do not return stack traces or provider exception details to clients.
+16. Do not hardcode real secrets in code, docs, tests, or seed data.
 
 ---
 
-## Observability Requirements
+## Observability Contract
 
-Use structured logs.
-
-Every gateway request must have:
+Every gateway request must have structured telemetry with:
 
 ```text
 CorrelationId
@@ -809,6 +862,7 @@ EstimatedCost
 LatencyMs
 FallbackUsed
 BudgetStatus
+RequestStatus
 ```
 
 Do not log prompt or response content.
@@ -841,119 +895,11 @@ Blocked request count
 
 ---
 
-## Frontend UX Requirements
+## Testing Contract
 
-The frontend should look like a polished SaaS product.
+Do not consider a feature complete unless tests are added or the reason for not adding tests is documented.
 
-Use:
-
-- clean sidebar
-- top navigation/header
-- cards for metrics
-- charts for usage
-- tables for logs
-- modals or side panels for create/edit forms
-- toast notifications
-- empty states
-- loading states
-- error states
-
-### Required Pages
-
-#### Dashboard
-
-Show:
-
-1. Total spend this month
-2. Total requests
-3. Total tokens
-4. Average latency
-5. Cost by model
-6. Cost by application
-7. Token usage trend
-8. Premium model usage
-9. Fallback rate
-10. Recent requests
-
-#### Providers
-
-Allow:
-
-1. List providers
-2. Add provider
-3. Edit provider
-4. Enable/disable provider
-
-#### Models
-
-Allow:
-
-1. List models
-2. Add model
-3. Edit model
-4. Assign model to tier
-5. Show pricing and context window
-
-#### Routing Rules
-
-Allow:
-
-1. List rules by priority
-2. Add rule
-3. Edit rule
-4. Enable/disable rule
-5. Test rule against sample request profile
-6. Show JSON preview
-
-#### Budgets
-
-Allow:
-
-1. List budgets
-2. Create budget
-3. Edit budget
-4. Delete budget
-5. View budget status
-6. See warning and hard-limit indicators
-
-#### API Keys
-
-Allow:
-
-1. List API keys
-2. Create API key
-3. Show raw key only once
-4. Revoke key
-5. Show last used date
-
-#### Usage Logs
-
-Allow:
-
-1. View recent requests
-2. Filter by date, application, model, provider
-3. See routing metadata
-4. See estimated cost
-
-#### Audit Logs
-
-Allow:
-
-1. View audit events
-2. Filter by actor, action, entity, date
-3. Expand before/after JSON
-
----
-
-## Testing Requirements
-
-Do not consider a feature complete unless tests are added or intentionally documented as not applicable.
-
-### Backend Tests
-
-Use xUnit.
-
-Required tests:
+Backend tests should cover:
 
 1. API key validation
 2. Token estimation
@@ -961,28 +907,28 @@ Required tests:
 4. Request profiling
 5. Rule matching
 6. Default routing
-7. High-risk human review
+7. High-risk human review behavior
 8. Budget warning
-9. Budget exceeded
+9. Budget exceeded behavior
 10. Provider adapter factory
 11. Fallback behavior
 12. Usage log creation
 13. Audit log creation
+14. Tenant isolation for key queries
 
-### Frontend Tests
-
-At minimum:
+Frontend requirements:
 
 1. TypeScript must compile.
-2. Lint must pass.
+2. Lint should pass if configured.
 3. Important forms should validate inputs.
 4. API client errors should be handled.
+5. Loading, empty, and error states must exist for main pages.
 
 ---
 
 ## Coding Standards
 
-### C# Standards
+### C#
 
 1. Use async/await correctly.
 2. Pass `CancellationToken` where appropriate.
@@ -992,266 +938,106 @@ At minimum:
 6. Put business logic in services.
 7. Use FluentValidation for request validation.
 8. Use `decimal` for money.
-9. Do not use magic strings when enums/constants are better.
+9. Prefer enums/constants over magic strings.
 10. Use clear DTOs for API requests and responses.
-11. Do not expose EF entities directly from API responses.
+11. Do not expose EF entities directly.
 12. Keep tenant filtering explicit.
 13. Add XML comments only where they add real value.
 
-### TypeScript Standards
+### TypeScript
 
 1. Use strict TypeScript.
-2. Avoid `any` unless necessary.
-3. Use Zod for form validation schemas where useful.
+2. Avoid `any` unless there is a strong reason.
+3. Use Zod for form validation where useful.
 4. Keep components small and reusable.
 5. Put API calls in `lib/api`.
 6. Use typed DTOs.
 7. Handle loading, empty, and error states.
-8. Avoid hardcoded mock data once API integration exists.
+8. Avoid hardcoded mock data once backend integration exists.
 
 ---
 
-## Database Rules
+## Vibe Coding Prompting Rules
 
-1. Use migrations for schema changes.
-2. Never manually edit generated migrations unless necessary.
-3. Add indexes for frequently queried fields.
-4. Add tenant-aware indexes.
-5. Use JSONB-compatible fields for rule conditions/actions.
-6. Store cost values as decimal/numeric.
-7. Store timestamps in UTC.
-8. Do not store provider secrets directly.
-9. Do not store raw prompt/response by default.
+Individual prompts should follow these rules:
 
-Important indexes:
+1. Do not repeat this AGENTS.md file.
+2. State the epic objective clearly.
+3. Ask for a vertical slice, not isolated boilerplate.
+4. Define outcomes and acceptance criteria.
+5. Specify exact public contracts only where necessary.
+6. Let the agent choose internal names unless consistency with existing code requires otherwise.
+7. Ask the agent to inspect the existing repository before editing.
+8. Ask the agent to preserve existing working behavior.
+9. Ask the agent to run relevant build/test commands.
+10. Ask the agent to report what actually passed and what failed.
+
+Good prompt style:
 
 ```text
-TenantId
-ApplicationId
-ApiKeyHash
-ProviderId
-ModelId
-CreatedAt
-TenantId + CreatedAt
-TenantId + ApplicationId + CreatedAt
-TenantId + ModelId + CreatedAt
+Implement the Gateway Core vertical slice. The result must allow a client app to create/use an API key, call /v1/chat/completions with model=auto, receive a mock OpenAI-compatible response, and produce safe usage metadata without logging raw prompt content.
 ```
+
+Avoid prompt style:
+
+```text
+Create class X with method Y and property Z in folder A, then create file B, then create interface C...
+```
+
+Use exact names only for external contracts such as endpoint paths, headers, environment variables, public response fields, and security invariants.
 
 ---
 
-## Local Commands
+## Epic-Based MVP Build Order
 
-Use these commands where applicable.
+Use this build order unless explicitly instructed otherwise:
 
-### Backend
-
-From:
-
-```text
-apps/gateway-api
-```
-
-Restore:
-
-```bash
-dotnet restore
-```
-
-Build:
-
-```bash
-dotnet build
-```
-
-Test:
-
-```bash
-dotnet test
-```
-
-Run:
-
-```bash
-dotnet run --project src/TokenShield.Api
-```
-
-Create migration:
-
-```bash
-dotnet ef migrations add <MigrationName> --project src/TokenShield.Infrastructure --startup-project src/TokenShield.Api
-```
-
-Apply migration:
-
-```bash
-dotnet ef database update --project src/TokenShield.Infrastructure --startup-project src/TokenShield.Api
-```
-
-### Frontend
-
-From:
-
-```text
-apps/web-admin
-```
-
-Install:
-
-```bash
-npm install
-```
-
-Run dev server:
-
-```bash
-npm run dev
-```
-
-Build:
-
-```bash
-npm run build
-```
-
-Lint:
-
-```bash
-npm run lint
-```
-
-### Docker Compose
-
-From repository root:
-
-```bash
-docker compose up --build
-```
+1. Product and repository foundation
+2. Backend persistence and seed foundation
+3. Gateway core vertical slice
+4. Routing, profiling, and cost vertical slice
+5. Budget, usage, and audit governance vertical slice
+6. Provider integration and fallback vertical slice
+7. Admin API vertical slice
+8. Frontend admin console vertical slice
+9. Production readiness vertical slice
+10. Final MVP verification and hardening
 
 ---
 
-## Definition of Done
+## Definition of Done for Any Epic
 
-A task is complete only when:
+An epic is complete only when:
 
-1. Code builds successfully.
+1. The code builds successfully.
 2. Relevant tests are added or updated.
-3. Existing tests pass.
+3. Existing tests pass or failures are clearly explained.
 4. No raw secrets are stored or logged.
 5. No raw prompts/responses are logged by default.
 6. Public endpoints validate inputs.
-7. Admin mutations write audit logs where applicable.
-8. Documentation is updated if behavior changes.
-9. README or relevant docs include setup/configuration changes.
-10. The implementation follows the MVP scope and does not add unnecessary complexity.
+7. Tenant isolation is preserved.
+8. Admin mutations write audit logs where applicable.
+9. Documentation is updated if behavior changes.
+10. README or relevant docs include setup/configuration changes.
+11. The implementation follows MVP scope.
+12. No unnecessary future features are added.
 
 ---
 
-## MVP Build Order
+## Required Agent Completion Report
 
-Follow this sequence unless explicitly instructed otherwise:
-
-1. Product specification
-2. Repository setup
-3. Backend database model
-4. Development seed data
-5. API key authentication
-6. OpenAI-compatible endpoint with mock response
-7. Token and cost engine
-8. Request profiler
-9. Rule-based router
-10. Provider adapter abstraction
-11. End-to-end gateway flow
-12. Budget enforcement
-13. Azure OpenAI adapter
-14. OpenAI adapter
-15. Anthropic adapter
-16. Fallback logic
-17. Admin API for providers and models
-18. Admin API for routing rules
-19. Admin API for budgets
-20. Usage analytics APIs
-21. Frontend layout
-22. Frontend dashboard
-23. Frontend model catalog
-24. Frontend routing rule builder
-25. Frontend budget page
-26. Connect frontend to backend
-27. API key management
-28. Audit logs
-29. Observability
-30. Docker Compose
-31. Azure Bicep infrastructure
-32. GitHub Actions CI/CD
-33. MVP hardening
-
----
-
-## Out of Scope for MVP
-
-Do not implement these unless explicitly requested:
-
-1. Streaming responses
-2. Semantic cache
-3. Prompt compression
-4. LLM-based router
-5. ML-based cost optimizer
-6. Full SAML/SSO
-7. Stripe billing
-8. Kubernetes / AKS deployment
-9. Complex approval workflow
-10. Fine-tuning
-11. Prompt marketplace
-12. Multi-region active-active deployment
-13. Air-gapped deployment
-14. Advanced prompt injection detection
-15. Full data residency policy engine
-
----
-
-## Important Product Principles
-
-1. Cost control is the main product value.
-2. Governance is as important as routing.
-3. The gateway must be provider-agnostic.
-4. The API must be easy for developers to adopt.
-5. Prefer OpenAI-compatible APIs where possible.
-6. Enterprise buyers care about audit, security, and control.
-7. Do not over-engineer the MVP.
-8. Rule-based routing must be explainable.
-9. Never compromise tenant isolation.
-10. Never leak secrets, prompts, or sensitive data through logs.
-
----
-
-## Response Style for Codex
-
-When completing a task, provide:
+At the end of every epic, the coding agent must report:
 
 1. Summary of changes
 2. Files changed
 3. Tests added or updated
 4. Commands run
-5. Any known limitations
-6. Recommended next step
+5. Build/test/lint result
+6. Security/privacy notes
+7. Known limitations
+8. Recommended next step
 
-Do not claim tests passed unless they were actually run.
-
----
-
-## Safety and Data Handling
-
-This product may process sensitive enterprise prompts.
-
-Therefore:
-
-1. Treat prompts as sensitive data.
-2. Treat responses as sensitive data.
-3. Treat provider credentials as secrets.
-4. Treat API keys as secrets.
-5. Avoid storing raw content.
-6. Prefer hashing and metadata.
-7. Mask or avoid logging sensitive values.
-8. Make privacy-preserving behavior the default.
+The agent must not claim that tests passed unless they were actually run.
 
 ---
 
@@ -1271,4 +1057,108 @@ OpenAI-compatible gateway
 + Azure-ready deployment
 ```
 
-Avoid unnecessary complexity until the core value is working end-to-end.
+Prefer working vertical slices over disconnected micro-features. Avoid unnecessary complexity until the core value is working end-to-end.
+
+## Codex Execution Rules
+
+When working on this repository, always follow these rules.
+
+### Source of Truth
+
+Treat this `AGENTS.md` file as the primary source of truth for architecture, coding standards, security rules, testing expectations, and product boundaries.
+
+If a feature prompt conflicts with `AGENTS.md`, stop and prefer `AGENTS.md` unless the prompt explicitly says it is intentionally changing the project direction.
+
+### Task Execution Mode
+
+Work in vertical slices.
+
+For each requested epic or feature:
+
+1. Read `AGENTS.md`.
+2. Read only the requested epic or task instructions.
+3. Inspect the existing repository before editing.
+4. Reuse existing patterns, services, DTOs, folders, naming conventions, and tests.
+5. Avoid creating parallel structures that duplicate existing functionality.
+6. Implement only the requested epic or task.
+7. Do not implement future epics unless explicitly requested.
+8. Keep the implementation production-minded but not over-engineered.
+9. Prefer cohesive, working increments over isolated boilerplate.
+
+### Codebase Consistency Rules
+
+Before adding a new file, class, interface, DTO, endpoint, component, or service:
+
+1. Check whether an equivalent already exists.
+2. Extend existing abstractions where appropriate.
+3. Keep naming consistent with the current codebase.
+4. Do not introduce a second pattern for the same concern.
+5. Do not leave dead code, unused files, or duplicate implementations.
+
+### Security and Privacy Rules
+
+For every implementation:
+
+1. Never store raw API keys.
+2. Never log raw API keys.
+3. Never log raw prompts by default.
+4. Never log raw model responses by default.
+5. Store prompt and response hashes instead of raw content where request logging is required.
+6. Keep tenant isolation explicit in database queries.
+7. Return safe error messages to clients.
+8. Do not leak provider exception details.
+9. Store provider credentials only as secure references.
+10. Keep production CORS restrictive.
+
+### Testing Rules
+
+Do not consider a task complete unless relevant tests are added or updated.
+
+At minimum:
+
+1. Backend code must build.
+2. Backend tests must pass where applicable.
+3. Frontend TypeScript must compile where applicable.
+4. Frontend build must pass where applicable.
+5. Important service logic must have unit tests.
+6. Public endpoints should have integration tests where practical.
+7. Security-sensitive behavior must be tested.
+
+### Documentation Rules
+
+Update documentation only where it helps future development or operation.
+
+Prefer concise documentation that explains:
+
+1. What was implemented.
+2. How to run or test it.
+3. Important design decisions.
+4. Known limitations.
+5. Future extension points.
+
+Do not duplicate long sections from `AGENTS.md` into every document.
+
+### Completion Report
+
+At the end of every task, provide a concise completion report with:
+
+1. Files changed.
+2. What was implemented.
+3. Commands run.
+4. Build/test status.
+5. Assumptions made.
+6. Known limitations.
+7. Suggested next step.
+
+### Prohibited Behavior
+
+Do not:
+
+1. Implement multiple future epics without being asked.
+2. Rewrite large parts of the repository unnecessarily.
+3. Replace working code with unrelated patterns.
+4. Store or log secrets.
+5. Store or log raw prompts/responses by default.
+6. Skip tests for security-sensitive code.
+7. Add frontend mock data when a backend API already exists unless explicitly needed.
+8. Hide build or test failures.
