@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import Providers from "@/components/providers";
 import {
   LayoutDashboard,
   Server,
@@ -107,7 +108,7 @@ export default function RootLayout({
 
           {/* Main workspace view */}
           <main className="flex-1 overflow-y-auto bg-background p-8">
-            {children}
+            <Providers>{children}</Providers>
           </main>
         </div>
       </body>
