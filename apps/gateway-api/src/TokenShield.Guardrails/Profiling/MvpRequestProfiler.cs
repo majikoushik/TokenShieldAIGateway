@@ -5,12 +5,12 @@ using TokenShield.Domain.Models;
 
 namespace TokenShield.Guardrails.Profiling;
 
-public class RequestProfiler : IRequestProfiler
+public class MvpRequestProfiler : IRequestProfiler
 {
     private static readonly Regex EmailRegex = new(@"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", RegexOptions.Compiled);
     private static readonly Regex PhoneRegex = new(@"(\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}", RegexOptions.Compiled);
 
-    public RequestProfile ProfileRequest(ChatCompletionRequest request, int inputTokens)
+    public Task<RequestProfile> ProfileRequestAsync(ChatCompletionRequest request, int inputTokens, CancellationToken cancellationToken = default)
     {
         var profile = new RequestProfile();
 
@@ -44,7 +44,7 @@ public class RequestProfiler : IRequestProfiler
         // 5. Calculate Complexity Score (MVP Rules)
         profile.ComplexityScore = CalculateComplexity(profile);
 
-        return profile;
+        return Task.FromResult(profile);
     }
 
     private static string? GetMetadataValue(Dictionary<string, string> meta, string key, string? defaultValue)

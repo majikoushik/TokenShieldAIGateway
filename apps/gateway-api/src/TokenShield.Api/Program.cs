@@ -13,7 +13,9 @@ using TokenShield.Observability.Services;
 using TokenShield.Observability.Extensions;
 using TokenShield.ProviderAdapters;
 using TokenShield.ProviderAdapters.Services;
-
+using TokenShield.Guardrails.Profiling.Options;
+using TokenShield.Application.Common.Interfaces.Profiling;
+using TokenShield.Guardrails.Profiling.Classifiers;
 var builder = WebApplication.CreateBuilder(args);
 
 // ─── Structured Logging with Serilog ───────────────────────────────────────
@@ -42,7 +44,27 @@ builder.Services.AddHealthChecks()
 // ─── Application Services ──────────────────────────────────────────────────
 builder.Services.AddScoped<IRequestContext, RequestContext>();
 builder.Services.AddSingleton<ApiKeyService>();
-builder.Services.AddSingleton<IRequestProfiler, RequestProfiler>();
+// ─── Profiling subsystem ───────────────────────────────────────────────────
+builder.Services.Configure<RequestProfilerOptions>(
+    builder.Configuration.GetSection(RequestProfilerOptions.SectionName));
+
+builder.Services.AddSingleton<IMetadataProfileResolver, MetadataProfileResolver>();
+builder.Services.AddSingleton<ITaskClassifier, ConfigurableRuleBasedTaskClassifier>();
+builder.Services.AddSingleton<ISemanticTaskClassifier, DisabledSemanticTaskClassifier>();
+builder.Services.AddSingleton<ILlmRequestClassifier, DisabledLlmRequestClassifier>();
+builder.Services.AddSingleton<IRiskClassifier, RuleBasedRiskClassifier>();
+builder.Services.AddSingleton<ISensitivityDetector, RegexSensitivityDetector>();
+builder.Services.AddSingleton<IComplexityScorer, DefaultComplexityScorer>();
+builder.Services.AddSingleton<IProfileResultMerger, ProfileResultMerger>();
+
+builder.Services.AddSingleton<MvpRequestProfiler>();
+builder.Services.AddSingleton<ProductionRequestProfiler>();
+builder.Services.AddSingleton<HybridRequestProfiler>();
+builder.Services.AddSingleton<IRequestProfilerFactory, RequestProfilerFactory>();
+
+// Register the actual profiler interface by delegating to the factory
+builder.Services.AddTransient<IRequestProfiler>(sp => sp.GetRequiredService<IRequestProfilerFactory>().Create());
+
 builder.Services.AddSingleton<ICostEngineService, CostEngineService>();
 builder.Services.AddScoped<IRoutingRuleEngine, RoutingRuleEngine>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();

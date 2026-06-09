@@ -16,7 +16,7 @@ namespace TokenShield.UnitTests;
 public class RoutingEngineTests
 {
     private readonly CostEngineService _costEngine = new();
-    private readonly RequestProfiler _profiler = new();
+    private readonly MvpRequestProfiler _profiler = new();
 
     [Theory]
     [InlineData("hello", 2)] // 5 chars -> 2 tokens
@@ -48,7 +48,7 @@ public class RoutingEngineTests
     [InlineData("Write a Python script to sort a list.", "coding")]
     [InlineData("Analyze this data and think logically.", "complex_reasoning")]
     [InlineData("Hello there, how are you?", "general")]
-    public void RequestProfiler_InfersTaskType_FromKeywords(string prompt, string expectedTaskType)
+    public async Task RequestProfiler_InfersTaskType_FromKeywords(string prompt, string expectedTaskType)
     {
         // Arrange
         var request = new ChatCompletionRequest
@@ -58,7 +58,7 @@ public class RoutingEngineTests
         };
 
         // Act
-        var profile = _profiler.ProfileRequest(request, 10);
+        var profile = await _profiler.ProfileRequestAsync(request, 10);
 
         // Assert
         Assert.Equal(expectedTaskType, profile.TaskType);
@@ -68,7 +68,7 @@ public class RoutingEngineTests
     [InlineData("My email address is support@acme.com.", true)]
     [InlineData("Call me at 123-456-7890 if urgent.", true)]
     [InlineData("No sensitive data in this sentence.", false)]
-    public void RequestProfiler_ScansForPii_Correctly(string prompt, bool expectedContainsPii)
+    public async Task RequestProfiler_ScansForPii_Correctly(string prompt, bool expectedContainsPii)
     {
         // Arrange
         var request = new ChatCompletionRequest
@@ -78,14 +78,14 @@ public class RoutingEngineTests
         };
 
         // Act
-        var profile = _profiler.ProfileRequest(request, 10);
+        var profile = await _profiler.ProfileRequestAsync(request, 10);
 
         // Assert
         Assert.Equal(expectedContainsPii, profile.ContainsPii);
     }
 
     [Fact]
-    public void RequestProfiler_ComplexityScore_FollowsMvpRules()
+    public async Task RequestProfiler_ComplexityScore_FollowsMvpRules()
     {
         // Arrange - Base request
         var request1 = new ChatCompletionRequest
@@ -95,11 +95,11 @@ public class RoutingEngineTests
         };
         
         // Act & Assert 1 (Base complexity 20)
-        var profile1 = _profiler.ProfileRequest(request1, 100);
+        var profile1 = await _profiler.ProfileRequestAsync(request1, 100);
         Assert.Equal(20, profile1.ComplexityScore);
 
         // Arrange - High tokens (> 4000)
-        var profile2 = _profiler.ProfileRequest(request1, 4500);
+        var profile2 = await _profiler.ProfileRequestAsync(request1, 4500);
         Assert.Equal(40, profile2.ComplexityScore); // 20 base + 20 tokens
 
         // Arrange - Reasoning required metadata + complex_reasoning taskType
@@ -109,7 +109,7 @@ public class RoutingEngineTests
             Messages = new() { new ChatMessage { Role = "user", Content = "Analyze and reason through this logic problem." } },
             Metadata = new() { { "requiresReasoning", "true" } }
         };
-        var profile3 = _profiler.ProfileRequest(request3, 100);
+        var profile3 = await _profiler.ProfileRequestAsync(request3, 100);
         Assert.Equal(70, profile3.ComplexityScore); // 20 base + 30 reasoning + 20 inferred complex_reasoning taskType
     }
 

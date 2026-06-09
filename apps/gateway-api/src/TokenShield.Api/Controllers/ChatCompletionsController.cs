@@ -72,7 +72,7 @@ public class ChatCompletionsController : ControllerBase
         if (inputTokens == 0) inputTokens = 5; // Fallback minimum limit
 
         // 3. Create request profile (PII + taskType inference + complexity)
-        var profile = _requestProfiler.ProfileRequest(request, inputTokens);
+        var profile = await _requestProfiler.ProfileRequestAsync(request, inputTokens, HttpContext.RequestAborted);
 
         // Emit: AiRequestReceived
         _telemetry.TrackAiRequestReceived(new()
@@ -301,6 +301,19 @@ public class ChatCompletionsController : ControllerBase
                 CacheHit = false,
                 BudgetStatus = finalBudgetStatus,
                 Warning = warningMessage
+            },
+            Profile = new ProfileInfo
+            {
+                Mode = profile.ClassificationMethod == "hybrid" ? "Hybrid" : profile.ClassificationMethod == "configurable_rules" ? "Production" : "Mvp",
+                TaskType = profile.TaskType,
+                TaskTypeConfidence = profile.TaskTypeConfidence,
+                RiskLevel = profile.RiskLevel,
+                RiskConfidence = profile.RiskConfidence,
+                DataSensitivity = profile.DataSensitivity,
+                ComplexityScore = profile.ComplexityScore,
+                ComplexityBand = profile.ComplexityBand,
+                ClassificationMethod = profile.ClassificationMethod,
+                Warnings = profile.Warnings.ToList()
             }
         };
 

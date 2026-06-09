@@ -5,5 +5,5 @@ namespace TokenShield.Application.Common.Interfaces;
 
 public interface IRequestProfiler
 {
-    RequestProfile ProfileRequest(ChatCompletionRequest request, int inputTokens);
+    Task<RequestProfile> ProfileRequestAsync(ChatCompletionRequest request, int inputTokens, CancellationToken cancellationToken = default);
 }

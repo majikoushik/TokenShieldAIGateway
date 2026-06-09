@@ -54,6 +54,10 @@ public class ChatCompletionResponse
 
     [JsonPropertyName("routing")]
     public RoutingInfo Routing { get; set; } = null!;
+
+    [JsonPropertyName("profile")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ProfileInfo? Profile { get; set; }
 }
 
 public class ChatCompletionChoice
@@ -108,4 +112,37 @@ public class RoutingInfo
 
     [JsonPropertyName("warning")]
     public string? Warning { get; set; }
+}
+
+public class ProfileInfo
+{
+    [JsonPropertyName("mode")]
+    public string Mode { get; set; } = null!;
+
+    [JsonPropertyName("taskType")]
+    public string TaskType { get; set; } = null!;
+
+    [JsonPropertyName("taskTypeConfidence")]
+    public double TaskTypeConfidence { get; set; }
+
+    [JsonPropertyName("riskLevel")]
+    public string RiskLevel { get; set; } = null!;
+
+    [JsonPropertyName("riskConfidence")]
+    public double RiskConfidence { get; set; }
+
+    [JsonPropertyName("dataSensitivity")]
+    public string DataSensitivity { get; set; } = null!;
+
+    [JsonPropertyName("complexityScore")]
+    public int ComplexityScore { get; set; }
+
+    [JsonPropertyName("complexityBand")]
+    public string ComplexityBand { get; set; } = null!;
+
+    [JsonPropertyName("classificationMethod")]
+    public string ClassificationMethod { get; set; } = null!;
+
+    [JsonPropertyName("warnings")]
+    public List<string> Warnings { get; set; } = new();
 }

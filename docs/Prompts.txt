@@ -639,3 +639,1182 @@ The roadmap should prioritize sellable enterprise value after the MVP, including
 
 For each roadmap item, include business value, technical scope, dependencies, and suggested priority.
 ```
+
+We are building TokenShield AI Gateway.
+
+Please read the following files before making changes:
+
+1. AGENTS.md
+2. README.md
+3. docs/product-spec.md
+4. docs/architecture.md
+5. docs/request-profiler.md
+6. docs/routing-rules.md
+7. docs/end-to-end-gateway-flow.md
+8. docs/observability.md
+9. docs/admin-routing-rules-api.md
+10. docs/admin-usage-analytics-api.md
+11. docs/final-mvp-verification-report.md if available
+12. apps/gateway-api/README.md
+13. apps/web-admin/README.md
+
+Your task is to implement Post-MVP Feature: Production-Grade Request Profiler.
+
+Goal:
+Upgrade the current basic keyword-based Request Profiler into a production-grade, configurable, confidence-based request profiling system.
+
+The new profiler must support switching between the existing MVP profiler and the new production profiler using configuration flags.
+
+Important:
+Do not remove the existing MVP profiler.
+Do not break existing routing behavior.
+Do not break existing /v1/chat/completions flow.
+Do not introduce real LLM classifier calls yet unless explicitly behind a disabled flag.
+Do not store raw prompts.
+Do not log raw prompts.
+Do not log raw responses.
+Do not add semantic cache.
+Do not add prompt compression.
+Do not implement Entra ID.
+Do not implement a frontend admin UI for profiler rules yet unless explicitly requested.
+Focus only on backend profiler architecture, configuration, tests, and documentation.
+
+---
+
+## 1. Current Problem
+
+The existing profiler likely uses basic keyword logic such as:
+
+* summarize → summarization
+* classify → classification
+* extract → extraction
+* document/context → rag_answer
+* architecture/design → architecture_review
+* debug/error → code_debugging
+* incident/root cause → incident_analysis
+* reason/analyze/compare → complex_reasoning
+
+This is acceptable for MVP, but not production-grade.
+
+Production profiling should be:
+
+1. Configurable
+2. Tenant-aware
+3. Confidence-based
+4. Explainable
+5. Risk-aware
+6. Sensitivity-aware
+7. Extensible
+8. Safe
+9. Observable
+10. Backward-compatible
+
+---
+
+## 2. Feature Flag / Configuration
+
+Add configuration:
+
+```json
+{
+  "RequestProfiler": {
+    "Mode": "Mvp",
+    "EnableProductionProfiler": false,
+    "EnableSemanticClassifier": false,
+    "EnableLlmClassifier": false,
+    "LowConfidenceThreshold": 0.6,
+    "HighConfidenceThreshold": 0.85,
+    "DefaultTaskType": "general",
+    "DefaultRiskLevel": "medium",
+    "UseMetadataAsPrimarySignal": true,
+    "ValidateMetadataAgainstPrompt": true,
+    "EnableSensitivityDetection": true,
+    "EnableProfileSignals": true
+  }
+}
+```
+
+Supported modes:
+
+```text
+Mvp
+Production
+Hybrid
+```
+
+Behavior:
+
+1. Mode = Mvp
+
+   * Use the existing MVP profiler exactly as before.
+
+2. Mode = Production
+
+   * Use new production profiler.
+
+3. Mode = Hybrid
+
+   * Run production profiler first.
+   * If production confidence is too low, fall back to MVP profiler or safe default routing metadata.
+
+Feature flag behavior:
+
+* If EnableProductionProfiler=false, use MVP profiler.
+* If EnableProductionProfiler=true and Mode=Production, use production profiler.
+* If EnableProductionProfiler=true and Mode=Hybrid, use hybrid profiler.
+
+Default:
+
+* Keep default as MVP mode to avoid breaking existing behavior.
+
+Environment variable examples:
+
+```text
+RequestProfiler__Mode=Production
+RequestProfiler__EnableProductionProfiler=true
+RequestProfiler__EnableSemanticClassifier=false
+RequestProfiler__EnableLlmClassifier=false
+RequestProfiler__LowConfidenceThreshold=0.6
+RequestProfiler__HighConfidenceThreshold=0.85
+```
+
+---
+
+## 3. Profiler Selection Factory
+
+Create a factory or resolver:
+
+```csharp
+public interface IRequestProfilerFactory
+{
+    IRequestProfiler Create();
+}
+```
+
+or use DI registration based on options.
+
+Required implementations:
+
+```csharp
+MvpRequestProfiler
+ProductionRequestProfiler
+HybridRequestProfiler
+```
+
+If current profiler is named DefaultRequestProfiler, preserve it or rename carefully.
+
+Preferred:
+
+* Keep existing DefaultRequestProfiler as MVP behavior.
+* Add MvpRequestProfiler wrapper if needed.
+* Add ProductionRequestProfiler.
+* Add HybridRequestProfiler.
+
+The existing code path should still depend on:
+
+```csharp
+IRequestProfiler
+```
+
+So ChatCompletionGatewayService should not know which profiler is active.
+
+---
+
+## 4. Production Request Profile Model
+
+Extend RequestProfile safely.
+
+Current fields should remain backward-compatible.
+
+Add fields:
+
+```csharp
+public double TaskTypeConfidence { get; init; }
+public double RiskConfidence { get; init; }
+public string DataSensitivity { get; init; } = "unknown";
+public double SensitivityConfidence { get; init; }
+public string ComplexityBand { get; init; } = "medium";
+public string ClassificationMethod { get; init; } = "unknown";
+public IReadOnlyList<ProfileSignal> Signals { get; init; } = [];
+public IReadOnlyList<string> Warnings { get; init; } = [];
+```
+
+Add:
+
+```csharp
+public sealed class ProfileSignal
+{
+    public string Name { get; init; } = string.Empty;
+    public string Value { get; init; } = string.Empty;
+    public double Confidence { get; init; }
+    public string Source { get; init; } = string.Empty;
+}
+```
+
+Rules:
+
+* Existing router should continue working with TaskType, RiskLevel, ComplexityScore, ContainsPii, etc.
+* New routing rules may later use confidence fields.
+* Do not store raw prompt text in RequestProfile.
+* Do not include raw user message inside signals.
+* Signals should contain safe summaries only.
+
+Example signal:
+
+```json
+{
+  "name": "task_type",
+  "value": "summarization",
+  "confidence": 0.88,
+  "source": "rule_classifier"
+}
+```
+
+Do not include:
+
+```json
+{
+  "value": "Full raw user prompt..."
+}
+```
+
+---
+
+## 5. Production Profiler Architecture
+
+Create the following components:
+
+```csharp
+public interface IMetadataProfileResolver
+{
+    MetadataProfileResult Resolve(RequestClassificationInput input);
+}
+
+public interface ITaskClassifier
+{
+    Task<TaskClassificationResult> ClassifyAsync(
+        RequestClassificationInput input,
+        CancellationToken cancellationToken);
+}
+
+public interface IRiskClassifier
+{
+    Task<RiskClassificationResult> ClassifyAsync(
+        RequestClassificationInput input,
+        CancellationToken cancellationToken);
+}
+
+public interface ISensitivityDetector
+{
+    SensitivityDetectionResult Detect(RequestClassificationInput input);
+}
+
+public interface IComplexityScorer
+{
+    ComplexityScoreResult Calculate(
+        RequestClassificationInput input,
+        TaskClassificationResult task,
+        RiskClassificationResult risk,
+        SensitivityDetectionResult sensitivity);
+}
+
+public interface IProfileResultMerger
+{
+    RequestProfile Merge(
+        RequestClassificationInput input,
+        MetadataProfileResult metadata,
+        TaskClassificationResult task,
+        RiskClassificationResult risk,
+        SensitivityDetectionResult sensitivity,
+        ComplexityScoreResult complexity);
+}
+```
+
+Implement these services:
+
+```csharp
+MetadataProfileResolver
+ConfigurableRuleBasedTaskClassifier
+RuleBasedRiskClassifier
+RegexSensitivityDetector
+DefaultComplexityScorer
+ProfileResultMerger
+ProductionRequestProfiler
+HybridRequestProfiler
+```
+
+---
+
+## 6. RequestClassificationInput
+
+Create:
+
+```csharp
+public sealed class RequestClassificationInput
+{
+    public Guid? TenantId { get; init; }
+    public Guid? ClientApplicationId { get; init; }
+    public Guid? ApiKeyId { get; init; }
+
+    public string NormalizedText { get; init; } = string.Empty;
+
+    public IReadOnlyDictionary<string, string> Metadata { get; init; }
+        = new Dictionary<string, string>();
+
+    public int InputTokens { get; init; }
+    public int EstimatedOutputTokens { get; init; }
+
+    public string? ModelRequested { get; init; }
+    public string? Environment { get; init; }
+    public string? Department { get; init; }
+}
+```
+
+Rules:
+
+* NormalizedText can be used in memory only.
+* Do not persist NormalizedText.
+* Do not log NormalizedText.
+* Do not include NormalizedText in telemetry.
+* Metadata should be sanitized and converted to string dictionary.
+
+---
+
+## 7. Metadata Resolver
+
+Metadata should be the strongest signal when provided by trusted applications.
+
+Metadata keys to support:
+
+```text
+taskType
+riskLevel
+department
+environment
+workflow
+dataSensitivity
+requiresReasoning
+requiresStructuredOutput
+businessCriticality
+regulatedData
+```
+
+Behavior:
+
+1. If taskType is provided, return it with confidence 0.95.
+2. If riskLevel is provided, return it with confidence 0.90.
+3. If dataSensitivity is provided, return it with confidence 0.90.
+4. Validate values against supported allowed values.
+5. If unsupported metadata value appears, add warning and ignore it.
+6. If metadata says low risk but prompt signals high-risk decision, later risk classifier should be able to override or upgrade.
+
+Supported task types:
+
+```text
+summarization
+classification
+extraction
+rag_answer
+architecture_review
+code_debugging
+incident_analysis
+complex_reasoning
+policy_check
+fraud_analysis
+customer_support
+general
+```
+
+Supported risk levels:
+
+```text
+low
+medium
+high
+critical
+```
+
+Supported data sensitivity:
+
+```text
+public
+internal
+confidential
+restricted
+unknown
+```
+
+---
+
+## 8. Configurable Rule-Based Task Classifier
+
+Replace hardcoded keyword chains with configurable rule objects.
+
+Create model:
+
+```csharp
+public sealed class TaskClassificationRule
+{
+    public string TaskType { get; init; } = "general";
+    public IReadOnlyList<string> Phrases { get; init; } = [];
+    public IReadOnlyList<string> RegexPatterns { get; init; } = [];
+    public double Confidence { get; init; } = 0.75;
+    public int Priority { get; init; } = 100;
+    public bool IsEnabled { get; init; } = true;
+}
+```
+
+For now, load rules from configuration, not database.
+
+Add config:
+
+```json
+{
+  "RequestProfiler": {
+    "TaskClassificationRules": [
+      {
+        "TaskType": "summarization",
+        "Phrases": [
+          "summarize",
+          "summary",
+          "make shorter",
+          "executive summary",
+          "briefing note",
+          "key points",
+          "tl;dr",
+          "tldr"
+        ],
+        "RegexPatterns": [],
+        "Confidence": 0.82,
+        "Priority": 10,
+        "IsEnabled": true
+      }
+    ]
+  }
+}
+```
+
+Default rules must cover:
+
+* summarization
+* classification
+* extraction
+* rag_answer
+* architecture_review
+* code_debugging
+* incident_analysis
+* complex_reasoning
+* policy_check
+* fraud_analysis
+* customer_support
+* general fallback
+
+Classification logic:
+
+1. Normalize text.
+2. Evaluate enabled rules by priority.
+3. Phrase match gives rule confidence.
+4. Regex match gives rule confidence.
+5. If multiple rules match, choose highest confidence, then highest priority.
+6. Return top result and optional alternative candidates.
+7. If no rule matches, return general with low confidence.
+
+Do not store raw matched text.
+Signal should say phrase-category matched, not raw prompt.
+
+Example signal:
+
+```json
+{
+  "name": "task_rule_match",
+  "value": "summarization",
+  "confidence": 0.82,
+  "source": "configurable_rule_classifier"
+}
+```
+
+---
+
+## 9. Risk Classifier
+
+Implement a risk classifier separate from task type.
+
+Create:
+
+```csharp
+public sealed class RiskClassificationResult
+{
+    public string RiskLevel { get; init; } = "medium";
+    public double Confidence { get; init; }
+    public IReadOnlyList<ProfileSignal> Signals { get; init; } = [];
+    public IReadOnlyList<string> Warnings { get; init; } = [];
+}
+```
+
+Risk signals should detect:
+
+High/Critical:
+
+* approve transaction
+* reject claim
+* block account
+* close account
+* make final decision
+* legal decision
+* medical decision
+* financial decision
+* compliance violation
+* terminate employee
+* report to regulator
+* override policy
+
+Medium:
+
+* fraud
+* risk
+* compliance
+* audit
+* policy
+* customer complaint
+* investigation
+* suspicious activity
+
+Low:
+
+* summarize
+* rewrite
+* format
+* extract simple fields
+* draft internal note
+
+Rules:
+
+1. If high-risk decision phrase appears, risk must be high or critical.
+2. If metadata says low but risk classifier detects high-risk action, upgrade to high and add warning.
+3. If no signal, use metadata risk if valid.
+4. If no metadata and no signal, default to medium, not low.
+
+This is important for governance.
+
+---
+
+## 10. Sensitivity Detector
+
+Implement:
+
+```csharp
+public sealed class SensitivityDetectionResult
+{
+    public bool ContainsPii { get; init; }
+    public bool ContainsFinancialData { get; init; }
+    public bool ContainsHealthData { get; init; }
+    public bool ContainsLegalData { get; init; }
+    public string DataSensitivity { get; init; } = "unknown";
+    public double Confidence { get; init; }
+    public IReadOnlyList<ProfileSignal> Signals { get; init; } = [];
+}
+```
+
+Detect using regex/patterns:
+
+PII:
+
+* Email
+* Indian phone number
+* Generic international phone number
+* PAN-like pattern
+* Aadhaar-like pattern should be treated carefully and not logged
+* Credit card-like pattern should be detected using safe regex and Luhn check if practical
+
+Financial:
+
+* account number
+* IFSC-like pattern
+* credit card-like pattern
+* transaction amount
+* invoice
+* payment
+* loan
+* claim amount
+
+Health:
+
+* diagnosis
+* prescription
+* patient
+* medical record
+* symptoms
+* treatment
+
+Legal:
+
+* contract
+* agreement
+* legal notice
+* litigation
+* court
+* compliance violation
+
+Rules:
+
+1. Do not store matched sensitive values.
+2. Do not log matched sensitive values.
+3. Signals should say "email_detected" or "financial_pattern_detected", not the actual value.
+4. If restricted data is detected, set dataSensitivity = restricted.
+5. If confidential data is detected, set dataSensitivity = confidential.
+6. If no sensitivity found, use metadata sensitivity if valid.
+7. If nothing found, dataSensitivity = unknown.
+
+---
+
+## 11. Complexity Scorer
+
+Replace simple score calculation with more explainable scoring.
+
+Create:
+
+```csharp
+public sealed class ComplexityScoreResult
+{
+    public int Score { get; init; }
+    public string Band { get; init; } = "medium";
+    public IReadOnlyList<ProfileSignal> Signals { get; init; } = [];
+}
+```
+
+Suggested scoring:
+
+Base score:
+
+* 10
+
+Token signals:
+
+* inputTokens > 1000: +10
+* inputTokens > 4000: +20
+* inputTokens > 12000: +25
+* estimatedOutputTokens > 1000: +10
+* estimatedOutputTokens > 3000: +20
+
+Task type signals:
+
+* summarization: +5
+* classification: +10
+* extraction: +15
+* rag_answer: +20
+* code_debugging: +25
+* architecture_review: +30
+* incident_analysis: +30
+* complex_reasoning: +35
+* fraud_analysis: +25
+* policy_check: +20
+
+Reasoning:
+
+* requiresReasoning: +25
+* requiresStructuredOutput: +10
+
+Sensitivity:
+
+* containsPii: +10
+* containsFinancialData: +15
+* containsHealthData: +20
+* containsLegalData: +20
+* dataSensitivity restricted: +20
+
+Risk:
+
+* medium: +10
+* high: +25
+* critical: +35
+
+Clamp score 0 to 100.
+
+Bands:
+
+* 0-30: low
+* 31-65: medium
+* 66-100: high
+
+Return signals explaining why score increased.
+
+---
+
+## 12. Confidence and Safe Defaults
+
+Production profiler must not pretend certainty.
+
+Rules:
+
+1. If taskType confidence < LowConfidenceThreshold:
+
+   * taskType = general
+   * add warning
+   * classificationMethod should include low_confidence
+2. If risk confidence < LowConfidenceThreshold:
+
+   * riskLevel = medium
+   * add warning
+3. If task confidence is high but risk is uncertain:
+
+   * keep task type
+   * default risk to medium
+4. If sensitivity is uncertain:
+
+   * dataSensitivity = unknown
+5. If high-risk signal exists:
+
+   * do not downgrade risk because of metadata.
+
+This makes routing safer.
+
+---
+
+## 13. Hybrid Profiler
+
+Implement HybridRequestProfiler.
+
+Behavior:
+
+1. Run ProductionRequestProfiler.
+2. If production task confidence >= LowConfidenceThreshold:
+
+   * use production profile.
+3. If production task confidence < LowConfidenceThreshold:
+
+   * run MVP profiler.
+4. Merge:
+
+   * keep production risk and sensitivity if stronger.
+   * use MVP task type only as fallback.
+   * classificationMethod = hybrid.
+5. Add warning:
+
+   * "Production profiler confidence was low; MVP fallback was used."
+
+Hybrid mode gives safety during rollout.
+
+---
+
+## 14. Semantic Classifier Placeholder
+
+Add interface only, disabled by default:
+
+```csharp
+public interface ISemanticTaskClassifier
+{
+    Task<TaskClassificationResult> ClassifyAsync(
+        RequestClassificationInput input,
+        CancellationToken cancellationToken);
+}
+```
+
+Implement:
+
+```csharp
+DisabledSemanticTaskClassifier
+```
+
+Behavior:
+
+* returns no classification or general with 0 confidence.
+* no external calls.
+* no embeddings yet.
+
+This prepares future work without adding cost.
+
+---
+
+## 15. LLM Classifier Placeholder
+
+Add interface only, disabled by default:
+
+```csharp
+public interface ILlmRequestClassifier
+{
+    Task<TaskClassificationResult> ClassifyAsync(
+        RequestClassificationInput input,
+        CancellationToken cancellationToken);
+}
+```
+
+Implement:
+
+```csharp
+DisabledLlmRequestClassifier
+```
+
+Behavior:
+
+* returns no classification or general with 0 confidence.
+* no external provider calls.
+* no extra token cost.
+* no prompt logging.
+
+This prepares future work for cheap classifier model.
+
+---
+
+## 16. Router Compatibility
+
+Ensure existing router still works.
+
+Router must still read:
+
+* TaskType
+* RiskLevel
+* InputTokens
+* EstimatedOutputTokens
+* RequiresReasoning
+* RequiresStructuredOutput
+* ContainsPii
+* ComplexityScore
+* Department
+* Environment
+
+Add support for new fields later if easy:
+
+* TaskTypeConfidence
+* RiskConfidence
+* DataSensitivity
+* ComplexityBand
+
+But do not break existing routing rule parser.
+
+If adding new routable fields is simple, include:
+
+* taskTypeConfidence
+* riskConfidence
+* dataSensitivity
+* complexityBand
+* containsFinancialData
+* containsHealthData
+* containsLegalData
+
+Update routing docs accordingly only if implemented.
+
+---
+
+## 17. Response Metadata
+
+Update routing metadata returned by /v1/chat/completions to include safe profiler metadata.
+
+Add:
+
+```json
+"profile": {
+  "mode": "Production",
+  "taskType": "summarization",
+  "taskTypeConfidence": 0.88,
+  "riskLevel": "low",
+  "riskConfidence": 0.79,
+  "dataSensitivity": "internal",
+  "complexityScore": 28,
+  "complexityBand": "low",
+  "classificationMethod": "metadata+rules",
+  "warnings": []
+}
+```
+
+Do not return:
+
+* raw prompt
+* matched sensitive values
+* full normalized text
+* raw internal regex matches
+
+Signals can be returned if safe, but if uncertain, include only summary signals.
+
+---
+
+## 18. Observability
+
+Add safe telemetry/logging around profiler.
+
+Log:
+
+* profiler mode
+* taskType
+* task confidence
+* riskLevel
+* risk confidence
+* dataSensitivity
+* complexityScore
+* complexityBand
+* classificationMethod
+* warning count
+
+Do not log:
+
+* prompt text
+* normalized text
+* sensitive matched values
+* metadata values that may contain secrets
+
+Metrics if existing telemetry supports it:
+
+* tokenshield.profiler.classification.count
+* tags:
+
+  * mode
+  * task_type
+  * risk_level
+  * complexity_band
+  * classification_method
+
+Use low-cardinality tags only.
+
+---
+
+## 19. Tests
+
+Add unit tests for:
+
+MVP mode:
+
+1. Existing profiler behavior remains unchanged.
+2. Mode=Mvp uses MVP profiler.
+
+Production mode:
+3. Mode=Production uses ProductionRequestProfiler.
+4. Metadata taskType is used with high confidence.
+5. Metadata riskLevel is used with high confidence.
+6. Unsupported metadata taskType is ignored with warning.
+7. Summarization phrase "make this report shorter" maps to summarization.
+8. Extraction phrase "find parties, dates, and amounts" maps to extraction.
+9. Classification phrase "categorize this complaint" maps to classification.
+10. RAG phrase "answer from the attached policy" maps to rag_answer.
+11. Architecture phrase maps to architecture_review.
+12. Debug phrase maps to code_debugging.
+13. Incident phrase maps to incident_analysis.
+14. Complex reasoning phrase maps to complex_reasoning.
+15. Fraud analysis phrase maps to fraud_analysis.
+16. Policy check phrase maps to policy_check.
+
+Risk:
+17. "block this account" maps to high risk.
+18. "approve transaction" maps to high risk.
+19. "legal decision" maps to high risk.
+20. Metadata low risk is upgraded when high-risk phrase exists.
+21. No risk signal defaults to medium.
+
+Sensitivity:
+22. Email is detected as PII but actual email is not returned in signals.
+23. Phone number is detected as PII but actual phone is not returned.
+24. Financial terms are detected.
+25. Health terms are detected.
+26. Legal terms are detected.
+27. Restricted sensitivity is assigned when high sensitivity patterns appear.
+
+Complexity:
+28. Large input tokens increase score.
+29. Reasoning task increases score.
+30. Structured output increases score.
+31. High risk increases score.
+32. Restricted data increases score.
+33. Score is clamped to 100.
+34. Complexity band low/medium/high works.
+
+Hybrid:
+35. Hybrid uses production when confidence is sufficient.
+36. Hybrid falls back to MVP when production confidence is low.
+37. Hybrid adds warning when fallback is used.
+
+Security:
+38. Profiler does not log raw prompt.
+39. Profiler does not return raw prompt.
+40. Profiler signals do not contain sensitive matched values.
+41. API response profile metadata does not contain raw prompt.
+42. API response profile metadata does not contain detected email/phone value.
+
+Integration:
+43. /v1/chat/completions works in Mvp mode.
+44. /v1/chat/completions works in Production mode.
+45. /v1/chat/completions works in Hybrid mode.
+46. Existing routing rules still work.
+47. Budget enforcement still works.
+48. Usage logging still works.
+49. Audit logging still works.
+50. Existing admin APIs still work.
+
+---
+
+## 20. Documentation
+
+Create:
+
+docs/production-request-profiler.md
+
+Include:
+
+1. Why MVP profiler was limited
+2. Production profiler goals
+3. Feature flags
+4. Modes: Mvp, Production, Hybrid
+5. Metadata resolver
+6. Configurable rule classifier
+7. Risk classifier
+8. Sensitivity detector
+9. Complexity scorer
+10. Confidence scoring
+11. Hybrid fallback behavior
+12. Router compatibility
+13. Safe response metadata
+14. Observability
+15. Security rules
+16. Current limitations:
+
+    * semantic classifier is placeholder
+    * LLM classifier is placeholder
+    * no frontend profiler rule UI yet
+    * no database-backed profiler rules yet
+17. Future roadmap:
+
+    * tenant-specific profiler rules in DB
+    * admin UI for profiler rules
+    * embedding-based semantic classifier
+    * cheap LLM classifier
+    * classifier evaluation dashboard
+
+Update:
+
+docs/request-profiler.md
+
+Add:
+
+* MVP profiler remains available
+* production profiler can be enabled with flags
+* link to production-request-profiler.md
+
+Update:
+
+docs/routing-rules.md
+
+If new fields are routable, document:
+
+* taskTypeConfidence
+* riskConfidence
+* dataSensitivity
+* complexityBand
+* containsFinancialData
+* containsHealthData
+* containsLegalData
+
+Update:
+
+docs/end-to-end-gateway-flow.md
+
+Add production profiler step.
+
+Update:
+
+apps/gateway-api/README.md
+
+Add configuration examples:
+
+```text
+RequestProfiler__Mode=Production
+RequestProfiler__EnableProductionProfiler=true
+RequestProfiler__EnableSemanticClassifier=false
+RequestProfiler__EnableLlmClassifier=false
+```
+
+---
+
+## 21. Configuration Defaults
+
+Update appsettings.json and appsettings.Development.json safely.
+
+Default should remain MVP:
+
+```json
+{
+  "RequestProfiler": {
+    "Mode": "Mvp",
+    "EnableProductionProfiler": false
+  }
+}
+```
+
+Development may include sample production settings but should not enable by default unless tests expect it.
+
+Do not break existing behavior.
+
+---
+
+## 22. Quality Requirements
+
+1. Backend must build successfully.
+2. Backend tests must pass.
+3. Existing MVP profiler behavior must remain available.
+4. Feature flag must switch profiler mode.
+5. Production profiler must be configurable.
+6. Production profiler must return confidence scores.
+7. Production profiler must return safe signals.
+8. Production profiler must detect risk separately from task type.
+9. Production profiler must detect sensitivity without exposing matched values.
+10. Production profiler must calculate explainable complexity score.
+11. Hybrid mode must work.
+12. Semantic classifier placeholder must not make external calls.
+13. LLM classifier placeholder must not make external calls.
+14. /v1/chat/completions must continue working.
+15. Existing routing rules must continue working.
+16. Existing budget enforcement must continue working.
+17. Existing fallback logic must continue working.
+18. Existing observability must continue working.
+19. No raw prompt should be logged.
+20. No raw prompt should be stored.
+21. No raw response should be logged.
+22. No raw response should be stored.
+23. No sensitive matched values should appear in response metadata.
+24. No real provider calls should happen because of profiler.
+25. Documentation must be updated.
+26. Follow AGENTS.md strictly.
+
+---
+
+## 23. Commands to Run
+
+Run:
+
+```text
+dotnet restore
+dotnet build
+dotnet test
+```
+
+If frontend is not modified, no frontend build is required.
+
+If frontend is modified, also run:
+
+```text
+npm run lint --if-present
+npm run build
+```
+
+Do not claim a command passed unless actually run.
+
+---
+
+## 24. Final Response
+
+After completion, provide:
+
+1. Summary of changes
+2. Files created or modified
+3. Profiler modes implemented
+4. Feature flags added
+5. Production profiler components added
+6. Router compatibility notes
+7. Response metadata changes
+8. Security safeguards
+9. Tests added or updated
+10. Commands run
+11. Whether backend build passed
+12. Whether backend tests passed
+13. Whether frontend was modified
+14. Known limitations
+15. Recommended next step
+
+Recommended next step should be:
+Post-MVP Feature: Admin UI for Profiler Rules.
