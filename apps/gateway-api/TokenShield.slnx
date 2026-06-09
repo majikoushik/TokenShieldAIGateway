@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TokenShield.Api/TokenShield.Api.csproj" />
+    <Project Path="src/TokenShield.Application/TokenShield.Application.csproj" />
+    <Project Path="src/TokenShield.CostEngine/TokenShield.CostEngine.csproj" />
+    <Project Path="src/TokenShield.Domain/TokenShield.Domain.csproj" />
+    <Project Path="src/TokenShield.Guardrails/TokenShield.Guardrails.csproj" />
+    <Project Path="src/TokenShield.Infrastructure/TokenShield.Infrastructure.csproj" />
+    <Project Path="src/TokenShield.Observability/TokenShield.Observability.csproj" />
+    <Project Path="src/TokenShield.PolicyEngine/TokenShield.PolicyEngine.csproj" />
+    <Project Path="src/TokenShield.ProviderAdapters/TokenShield.ProviderAdapters.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TokenShield.IntegrationTests/TokenShield.IntegrationTests.csproj" />
+    <Project Path="tests/TokenShield.UnitTests/TokenShield.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,47 @@
+services:
+  tokenshield-db:
+    image: postgres:16-alpine
+    container_name: tokenshield-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tokenshield
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gateway-api:
+    build:
+      context: ./apps/gateway-api
+      dockerfile: Dockerfile
+    container_name: tokenshield-gateway-api
+    ports:
+      - "5000:5000"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: "Host=tokenshield-db;Port=5432;Database=tokenshield;Username=postgres;Password=postgres"
+    depends_on:
+      tokenshield-db:
+        condition: service_healthy
+
+  web-admin:
+    build:
+      context: ./apps/web-admin
+      dockerfile: Dockerfile
+    container_name: tokenshield-web-admin
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      - gateway-api
+
+volumes:
+  pgdata:
