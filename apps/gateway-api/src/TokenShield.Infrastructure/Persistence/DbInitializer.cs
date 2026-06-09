@@ -198,6 +198,36 @@ public static class DbInitializer
         }
         await context.SaveChangesAsync();
 
+        // 6.5 Seed Profiler Rules
+        var profilerRules = new List<(string Name, string TaskType, string Phrases, string RegexPatterns, double Confidence, int Priority)>
+        {
+            ("Summarization Task", "summarization", "[\"summarize\",\"tl;dr\",\"key points\"]", "[]", 0.82, 10),
+            ("Code Review Task", "code_review", "[\"review this code\",\"find bugs in this PR\"]", "[]", 0.85, 20),
+            ("Translation Task", "translation", "[\"translate to\",\"translate this\"]", "[]", 0.90, 30)
+        };
+
+        foreach (var pr in profilerRules)
+        {
+            var pRule = await context.ProfilerRules.FirstOrDefaultAsync(x => x.TenantId == tenant.Id && x.Name == pr.Name);
+            if (pRule == null)
+            {
+                pRule = new ProfilerRule
+                {
+                    TenantId = tenant.Id,
+                    Name = pr.Name,
+                    TargetTaskType = pr.TaskType,
+                    PhrasesJson = pr.Phrases,
+                    RegexPatternsJson = pr.RegexPatterns,
+                    Confidence = pr.Confidence,
+                    Priority = pr.Priority,
+                    IsActive = true
+                };
+                context.ProfilerRules.Add(pRule);
+                logger.LogInformation("Seeded Profiler Rule: {RuleName}", pRule.Name);
+            }
+        }
+        await context.SaveChangesAsync();
+
         // 7. Seed Budgets
         // Tenant Budget
         var tenantBudget = await context.BudgetLimits.FirstOrDefaultAsync(b => b.TenantId == tenant.Id && b.Scope == BudgetScope.Tenant);

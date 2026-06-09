@@ -9,41 +9,56 @@ using TokenShield.Application.Common.Interfaces.Profiling;
 using TokenShield.Application.Common.Models.Profiling;
 using TokenShield.Domain.Models;
 using TokenShield.Guardrails.Profiling.Options;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace TokenShield.Guardrails.Profiling.Classifiers;
 
 public class ConfigurableRuleBasedTaskClassifier : ITaskClassifier
 {
     private readonly RequestProfilerOptions _options;
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    public ConfigurableRuleBasedTaskClassifier(IOptions<RequestProfilerOptions> options)
+    public ConfigurableRuleBasedTaskClassifier(IOptions<RequestProfilerOptions> options, IServiceScopeFactory scopeFactory)
     {
         _options = options.Value;
+        _scopeFactory = scopeFactory;
     }
 
-    public Task<TaskClassificationResult> ClassifyAsync(RequestClassificationInput input, CancellationToken cancellationToken)
+    public async Task<TaskClassificationResult> ClassifyAsync(RequestClassificationInput input, CancellationToken cancellationToken)
     {
         var normalized = input.NormalizedText;
         if (string.IsNullOrWhiteSpace(normalized))
         {
-            return Task.FromResult(new TaskClassificationResult
+            return new TaskClassificationResult
             {
                 TaskType = _options.DefaultTaskType,
                 Confidence = 0.1,
                 ClassificationMethod = "default_fallback"
-            });
+            };
         }
 
         var activeRules = _options.TaskClassificationRules
             .Where(r => r.IsEnabled)
-            .OrderByDescending(r => r.Priority)
             .ToList();
+
+        if (input.TenantId.HasValue)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var dbProvider = scope.ServiceProvider.GetService<IDatabaseProfilerRuleProvider>();
+            if (dbProvider != null)
+            {
+                var dbRules = await dbProvider.GetActiveTaskRulesAsync(input.TenantId.Value, cancellationToken);
+                activeRules.AddRange(dbRules);
+            }
+        }
+
+        var sortedRules = activeRules.OrderByDescending(r => r.Priority).ToList();
 
         var bestMatch = default(TaskClassificationRule);
         var bestConfidence = 0.0;
         var signalName = string.Empty;
 
-        foreach (var rule in activeRules)
+        foreach (var rule in sortedRules)
         {
             var matched = false;
 
@@ -72,7 +87,7 @@ public class ConfigurableRuleBasedTaskClassifier : ITaskClassifier
 
         if (bestMatch != null)
         {
-            return Task.FromResult(new TaskClassificationResult
+            return new TaskClassificationResult
             {
                 TaskType = bestMatch.TaskType,
                 Confidence = bestMatch.Confidence,
@@ -87,14 +102,14 @@ public class ConfigurableRuleBasedTaskClassifier : ITaskClassifier
                         Source = "configurable_rule_classifier"
                     }
                 }
-            });
+            };
         }
 
-        return Task.FromResult(new TaskClassificationResult
+        return new TaskClassificationResult
         {
             TaskType = _options.DefaultTaskType,
             Confidence = 0.2, // Low confidence for default
             ClassificationMethod = "default_fallback"
-        });
+        };
     }
 }

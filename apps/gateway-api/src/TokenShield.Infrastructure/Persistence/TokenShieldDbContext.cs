@@ -17,6 +17,7 @@ public class TokenShieldDbContext : DbContext
     public DbSet<ModelProvider> ModelProviders => Set<ModelProvider>();
     public DbSet<AiModel> AiModels => Set<AiModel>();
     public DbSet<RoutingRule> RoutingRules => Set<RoutingRule>();
+    public DbSet<ProfilerRule> ProfilerRules => Set<ProfilerRule>();
     public DbSet<BudgetLimit> BudgetLimits => Set<BudgetLimit>();
     public DbSet<AiRequestLog> AiRequestLogs => Set<AiRequestLog>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -87,6 +88,17 @@ public class TokenShieldDbContext : DbContext
             entity.Property(r => r.ConditionsJson).HasColumnType("jsonb");
             entity.Property(r => r.Action).HasConversion<string>().HasMaxLength(50);
             entity.Property(r => r.TargetTier).HasConversion<string>().HasMaxLength(50);
+            entity.HasIndex(r => r.TenantId);
+            entity.HasIndex(r => new { r.TenantId, r.IsDeleted });
+        });
+
+        // Configure ProfilerRule
+        modelBuilder.Entity<ProfilerRule>(entity =>
+        {
+            entity.Property(r => r.Name).IsRequired().HasMaxLength(200);
+            entity.Property(r => r.TargetTaskType).IsRequired().HasMaxLength(100);
+            entity.Property(r => r.PhrasesJson).HasColumnType("jsonb");
+            entity.Property(r => r.RegexPatternsJson).HasColumnType("jsonb");
             entity.HasIndex(r => r.TenantId);
             entity.HasIndex(r => new { r.TenantId, r.IsDeleted });
         });

@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Settings,
   Layers,
-  UserCheck
+  UserCheck,
+  Activity
 } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -31,6 +32,7 @@ export default function RootLayout({
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Providers", href: "/providers", icon: Server },
     { name: "Models", href: "/models", icon: Cpu },
+    { name: "Profiler Rules", href: "/profiler-rules", icon: Activity },
     { name: "Routing Rules", href: "/routing-rules", icon: Route },
     { name: "Budgets", href: "/budgets", icon: Coins },
     { name: "Usage Logs", href: "/usage-logs", icon: History },

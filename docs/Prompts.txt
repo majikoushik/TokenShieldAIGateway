@@ -1818,3 +1818,1197 @@ After completion, provide:
 
 Recommended next step should be:
 Post-MVP Feature: Admin UI for Profiler Rules.
+
+
+Prompt for Admin UI changes
+
+We are building TokenShield AI Gateway.
+
+Please read the following files before making changes:
+
+1. AGENTS.md
+2. README.md
+3. docs/product-spec.md
+4. docs/architecture.md
+5. docs/request-profiler.md
+6. docs/production-request-profiler.md
+7. docs/routing-rules.md
+8. docs/end-to-end-gateway-flow.md
+9. docs/admin-routing-rules-api.md
+10. docs/admin-usage-analytics-api.md
+11. apps/gateway-api/README.md
+12. apps/web-admin/README.md
+
+Your task is to implement Post-MVP Feature: Admin UI for Production Profiler Rules.
+
+Goal:
+Create backend admin APIs and frontend admin UI to manage production-grade request profiler rules.
+
+The MVP already has basic routing rule UI and a basic profiler. A production-grade profiler has now been introduced with configurable classification rules, confidence scores, risk classification, sensitivity detection, complexity scoring, and profiler modes.
+
+This feature should allow administrators to configure and test profiler classification rules from the admin console.
+
+Important:
+Do not remove the existing MVP profiler.
+Do not remove existing routing rules.
+Do not break existing /v1/chat/completions.
+Do not break existing routing rule builder.
+Do not implement semantic classifier yet.
+Do not implement LLM classifier yet.
+Do not call real LLMs from the profiler.
+Do not store raw prompts.
+Do not log raw prompts.
+Do not store or display raw responses.
+Do not implement Entra ID.
+Do not implement a full RBAC system.
+Focus on profiler rule management for the new production-grade profiler.
+
+---
+
+## 1. Conceptual Difference
+
+Routing rules and profiler rules are different.
+
+Routing rules decide:
+
+```text
+Given a RequestProfile, which tier/model/action should be used?
+```
+
+Profiler rules decide:
+
+```text
+Given an incoming request text and metadata, what is the task type, risk, sensitivity, confidence, and complexity?
+```
+
+Do not mix routing rules and profiler rules.
+
+Keep them as separate admin sections.
+
+Existing page:
+
+```text
+/routing-rules
+```
+
+New page:
+
+```text
+/profiler-rules
+```
+
+---
+
+## 2. Backend Data Model
+
+Add database-backed profiler rule support.
+
+Create entity:
+
+```csharp
+public sealed class ProfilerRule
+{
+    public Guid Id { get; set; }
+
+    public Guid TenantId { get; set; }
+
+    public string Name { get; set; } = string.Empty;
+
+    public string Description { get; set; } = string.Empty;
+
+    public string RuleType { get; set; } = string.Empty;
+    // task_classification, risk_classification, sensitivity_classification
+
+    public string TargetValue { get; set; } = string.Empty;
+    // taskType value, riskLevel value, or dataSensitivity value
+
+    public string MatchType { get; set; } = string.Empty;
+    // phrase, regex, metadata, combined
+
+    public string PatternsJson { get; set; } = "[]";
+    // JSON array of safe phrases or regex patterns
+
+    public double Confidence { get; set; }
+
+    public int Priority { get; set; }
+
+    public bool IsEnabled { get; set; } = true;
+
+    public int Version { get; set; } = 1;
+
+    public string? MetadataConditionsJson { get; set; }
+
+    public string? Notes { get; set; }
+
+    public DateTime CreatedAtUtc { get; set; }
+
+    public DateTime UpdatedAtUtc { get; set; }
+
+    public DateTime? DeletedAtUtc { get; set; }
+
+    public bool IsDeleted { get; set; }
+}
+```
+
+Supported RuleType values:
+
+```text
+task_classification
+risk_classification
+sensitivity_classification
+```
+
+Supported MatchType values:
+
+```text
+phrase
+regex
+metadata
+combined
+```
+
+Supported TargetValue examples:
+
+For task_classification:
+
+```text
+summarization
+classification
+extraction
+rag_answer
+architecture_review
+code_debugging
+incident_analysis
+complex_reasoning
+policy_check
+fraud_analysis
+customer_support
+general
+```
+
+For risk_classification:
+
+```text
+low
+medium
+high
+critical
+```
+
+For sensitivity_classification:
+
+```text
+public
+internal
+confidential
+restricted
+unknown
+```
+
+Add EF Core configuration:
+
+1. TenantId index
+2. RuleType index
+3. TargetValue index
+4. IsEnabled index
+5. Priority index
+6. Soft-delete query filter if project uses soft delete filters
+7. Reasonable max lengths
+8. PatternsJson as jsonb for PostgreSQL if existing conventions use jsonb
+
+Add migration:
+
+```text
+AddProfilerRules
+```
+
+---
+
+## 3. Seed Default Profiler Rules
+
+Seed default profiler rules for the demo tenant.
+
+Seed rules should cover:
+
+Task classification:
+
+1. Summarization
+2. Classification
+3. Extraction
+4. RAG answer
+5. Architecture review
+6. Code debugging
+7. Incident analysis
+8. Complex reasoning
+9. Policy check
+10. Fraud analysis
+11. Customer support
+
+Risk classification:
+
+1. Low-risk rewrite/summarize/format
+2. Medium-risk fraud/compliance/audit/investigation
+3. High-risk approve/reject/block/close account/legal/financial/medical decision
+4. Critical-risk irreversible decision/regulatory reporting/policy override
+
+Sensitivity classification:
+
+1. Public
+2. Internal
+3. Confidential
+4. Restricted
+
+Seeder must be idempotent.
+
+Do not duplicate seeded rules on repeated startup.
+
+---
+
+## 4. Backend Profiler Rule Service
+
+Create service:
+
+```csharp
+public interface IProfilerRuleService
+{
+    Task<PagedResult<ProfilerRuleDto>> GetRulesAsync(
+        ProfilerRuleQuery query,
+        CancellationToken cancellationToken);
+
+    Task<ProfilerRuleDto?> GetRuleByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken);
+
+    Task<ProfilerRuleDto> CreateRuleAsync(
+        CreateProfilerRuleRequest request,
+        CancellationToken cancellationToken);
+
+    Task<ProfilerRuleDto> UpdateRuleAsync(
+        Guid id,
+        UpdateProfilerRuleRequest request,
+        CancellationToken cancellationToken);
+
+    Task EnableRuleAsync(Guid id, CancellationToken cancellationToken);
+
+    Task DisableRuleAsync(Guid id, CancellationToken cancellationToken);
+
+    Task DeleteRuleAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<ProfilerRuleTestResult> TestRulesAsync(
+        TestProfilerRulesRequest request,
+        CancellationToken cancellationToken);
+}
+```
+
+Rules:
+
+1. All operations must be tenant-scoped.
+2. No cross-tenant reads or writes.
+3. Delete should be soft delete.
+4. Update should increment Version if patterns, target value, confidence, metadata conditions, or match type change.
+5. Mutations must write audit logs.
+6. Do not store raw test prompt in database.
+7. Do not log raw test prompt.
+
+---
+
+## 5. Backend Admin API
+
+Create controller:
+
+```text
+ProfilerRulesAdminController
+```
+
+Base route:
+
+```text
+/api/admin/profiler-rules
+```
+
+All endpoints must require existing admin API authentication using x-admin-key.
+
+Endpoints:
+
+### GET /api/admin/profiler-rules
+
+Query parameters:
+
+```text
+page
+pageSize
+ruleType
+targetValue
+matchType
+isEnabled
+search
+```
+
+Return paginated list.
+
+### GET /api/admin/profiler-rules/{id}
+
+Return rule detail.
+
+### POST /api/admin/profiler-rules
+
+Create rule.
+
+Request:
+
+```json
+{
+  "name": "Executive summary classifier",
+  "description": "Detects summary-style requests for executive reports.",
+  "ruleType": "task_classification",
+  "targetValue": "summarization",
+  "matchType": "phrase",
+  "patterns": [
+    "executive summary",
+    "make this shorter",
+    "key points",
+    "briefing note"
+  ],
+  "confidence": 0.84,
+  "priority": 10,
+  "isEnabled": true,
+  "metadataConditions": null,
+  "notes": "Used for management reporting use cases."
+}
+```
+
+### PUT /api/admin/profiler-rules/{id}
+
+Update rule.
+
+### POST /api/admin/profiler-rules/{id}/enable
+
+Enable rule.
+
+### POST /api/admin/profiler-rules/{id}/disable
+
+Disable rule.
+
+### DELETE /api/admin/profiler-rules/{id}
+
+Soft delete rule.
+
+### POST /api/admin/profiler-rules/test
+
+Test profiler rules against a sample request.
+
+Request:
+
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Make this investigation report shorter for senior management."
+    }
+  ],
+  "metadata": {
+    "department": "fraud",
+    "environment": "prod"
+  },
+  "inputTokens": 800,
+  "estimatedOutputTokens": 250,
+  "profilerMode": "Production"
+}
+```
+
+Response:
+
+```json
+{
+  "profile": {
+    "taskType": "summarization",
+    "taskTypeConfidence": 0.84,
+    "riskLevel": "medium",
+    "riskConfidence": 0.72,
+    "dataSensitivity": "internal",
+    "sensitivityConfidence": 0.65,
+    "complexityScore": 32,
+    "complexityBand": "medium",
+    "classificationMethod": "database_rules",
+    "requiresReasoning": false,
+    "requiresStructuredOutput": false,
+    "containsPii": false,
+    "warnings": []
+  },
+  "matchedRules": [
+    {
+      "id": "...",
+      "name": "Executive summary classifier",
+      "ruleType": "task_classification",
+      "targetValue": "summarization",
+      "confidence": 0.84,
+      "priority": 10
+    }
+  ],
+  "safeSignals": [
+    {
+      "name": "task_rule_match",
+      "value": "summarization",
+      "confidence": 0.84,
+      "source": "profiler_rule"
+    }
+  ]
+}
+```
+
+Security:
+
+* Do not store test messages.
+* Do not log raw test messages.
+* Do not include matched sensitive values.
+* Do not return normalized raw prompt.
+* Return safe signals only.
+
+---
+
+## 6. Validation
+
+Use FluentValidation.
+
+Create validators for:
+
+1. CreateProfilerRuleRequest
+2. UpdateProfilerRuleRequest
+3. TestProfilerRulesRequest
+
+Validation rules:
+
+Name:
+
+* required
+* max length 150
+
+Description:
+
+* max length 1000
+
+RuleType:
+
+* required
+* must be one of supported values
+
+TargetValue:
+
+* required
+* must be valid for selected RuleType
+
+MatchType:
+
+* required
+* must be phrase, regex, metadata, or combined
+
+Patterns:
+
+* required for phrase, regex, combined
+* max 50 patterns
+* each pattern max length 300
+* no empty patterns
+* regex patterns must compile safely
+* reject dangerous regex if possible
+
+Confidence:
+
+* required
+* 0.0 to 1.0
+
+Priority:
+
+* required
+* 1 to 10000
+
+MetadataConditions:
+
+* optional
+* must be valid JSON object if supplied
+* should not contain secret-like keys
+
+Reject secret-like fields in patterns or metadata if obvious:
+
+```text
+apiKey
+api_key
+secret
+password
+token
+authorization
+x-api-key
+x-admin-key
+```
+
+Do not over-block normal text, but reject obvious secret configuration attempts.
+
+---
+
+## 7. Connect Database Rules to Production Profiler
+
+Update the production profiler so it can load and use database-backed profiler rules.
+
+Create:
+
+```csharp
+public interface IProfilerRuleProvider
+{
+    Task<IReadOnlyList<ProfilerRuleDefinition>> GetActiveRulesAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken);
+}
+```
+
+Implement:
+
+```csharp
+DatabaseProfilerRuleProvider
+```
+
+Behavior:
+
+1. Load active, non-deleted rules for tenant.
+2. Sort by priority ascending.
+3. Cache briefly if appropriate, but do not overcomplicate.
+4. If database rules are unavailable, fall back to configuration/default rules safely.
+5. Do not fail entire AI request because profiler rules could not load unless configuration says strict mode.
+
+Add configuration:
+
+```json
+{
+  "RequestProfiler": {
+    "UseDatabaseRules": true,
+    "FallbackToConfiguredRules": true,
+    "FailClosedOnProfilerRuleLoadError": false
+  }
+}
+```
+
+Default:
+
+* UseDatabaseRules=true if production profiler enabled.
+* FallbackToConfiguredRules=true.
+* FailClosedOnProfilerRuleLoadError=false for MVP/Post-MVP safety.
+
+Update `ConfigurableRuleBasedTaskClassifier` or equivalent to use:
+
+1. database rules first
+2. configured rules second
+3. safe fallback to general
+
+Risk and sensitivity classifiers should also use profiler rules where RuleType matches:
+
+* risk_classification
+* sensitivity_classification
+
+---
+
+## 8. Audit Logging
+
+Write audit logs for:
+
+```text
+ProfilerRuleCreated
+ProfilerRuleUpdated
+ProfilerRuleEnabled
+ProfilerRuleDisabled
+ProfilerRuleDeleted
+ProfilerRuleTested
+```
+
+AuditLog requirements:
+
+1. TenantId
+2. EntityType = ProfilerRule
+3. EntityId
+4. BeforeJson for updates
+5. AfterJson for creates/updates
+6. MetadataJson for test summary only
+
+Do not include:
+
+* raw test prompt
+* normalized text
+* sensitive matched values
+* admin key
+* API key
+* provider credentials
+
+For test event, log safe metadata only:
+
+```json
+{
+  "profilerMode": "Production",
+  "resultTaskType": "summarization",
+  "resultRiskLevel": "medium",
+  "complexityBand": "medium",
+  "matchedRuleCount": 2
+}
+```
+
+---
+
+## 9. Frontend Navigation
+
+Add new navigation item:
+
+```text
+Profiler Rules
+```
+
+Route:
+
+```text
+/profiler-rules
+```
+
+Place near Routing Rules in sidebar.
+
+This page is separate from Routing Rules.
+
+---
+
+## 10. Frontend API Client
+
+Create:
+
+```text
+apps/web-admin/lib/api/profiler-rules-api.ts
+```
+
+Implement:
+
+```text
+listProfilerRules(filters)
+getProfilerRule(id)
+createProfilerRule(request)
+updateProfilerRule(id, request)
+enableProfilerRule(id)
+disableProfilerRule(id)
+deleteProfilerRule(id)
+testProfilerRules(request)
+```
+
+Use existing `apiFetch`.
+
+---
+
+## 11. Frontend Types
+
+Create:
+
+```text
+apps/web-admin/types/profiler-rules.ts
+```
+
+Types:
+
+```typescript
+export type ProfilerRuleType =
+  | "task_classification"
+  | "risk_classification"
+  | "sensitivity_classification";
+
+export type ProfilerMatchType =
+  | "phrase"
+  | "regex"
+  | "metadata"
+  | "combined";
+
+export interface ProfilerRule {
+  id: string;
+  name: string;
+  description: string;
+  ruleType: ProfilerRuleType;
+  targetValue: string;
+  matchType: ProfilerMatchType;
+  patterns: string[];
+  confidence: number;
+  priority: number;
+  isEnabled: boolean;
+  version: number;
+  metadataConditions?: Record<string, unknown> | null;
+  notes?: string | null;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+```
+
+Add request/response types for create, update, list, and test.
+
+Avoid `any`.
+
+---
+
+## 12. Profiler Rules Page
+
+Create page:
+
+```text
+apps/web-admin/app/profiler-rules/page.tsx
+```
+
+Page title:
+
+```text
+Profiler Rules
+```
+
+Description:
+
+```text
+Configure how TokenShield classifies AI requests before routing them to the right model tier.
+```
+
+Sections:
+
+1. Summary cards
+2. Rule filters
+3. Profiler rules table
+4. Create/edit rule dialog
+5. Profiler test panel
+6. Explanation card: Profiler Rules vs Routing Rules
+
+---
+
+## 13. Summary Cards
+
+Show:
+
+1. Total Rules
+2. Enabled Rules
+3. Task Rules
+4. Risk Rules
+5. Sensitivity Rules
+
+Use loaded backend data.
+
+---
+
+## 14. Filters
+
+Create component:
+
+```text
+apps/web-admin/components/profiler-rules/profiler-rule-filters.tsx
+```
+
+Filters:
+
+1. Search
+2. Rule Type
+3. Target Value
+4. Match Type
+5. Enabled/Disabled
+
+---
+
+## 15. Profiler Rules Table
+
+Create component:
+
+```text
+apps/web-admin/components/profiler-rules/profiler-rules-table.tsx
+```
+
+Columns:
+
+1. Name
+2. Rule Type
+3. Target Value
+4. Match Type
+5. Confidence
+6. Priority
+7. Status
+8. Version
+9. Updated
+10. Actions
+
+Actions:
+
+1. View
+2. Edit
+3. Enable
+4. Disable
+5. Delete
+
+Rules:
+
+* Show badges for rule type.
+* Show confidence as percentage.
+* Show status clearly.
+* Do not display secret-like values.
+* Long patterns should not be shown fully in the table.
+
+---
+
+## 16. Create/Edit Rule Dialog
+
+Create component:
+
+```text
+apps/web-admin/components/profiler-rules/profiler-rule-form-dialog.tsx
+```
+
+Fields:
+
+1. Name
+2. Description
+3. Rule Type
+4. Target Value
+5. Match Type
+6. Patterns
+7. Confidence
+8. Priority
+9. Enabled
+10. Metadata Conditions JSON
+11. Notes
+
+UI requirements:
+
+* Target Value options should change based on Rule Type.
+* Patterns should be editable as a list.
+* Confidence should be 0 to 1 or percentage slider.
+* Priority should be numeric.
+* Metadata Conditions JSON should validate before submit.
+* Regex patterns should show a warning.
+* Show helper text explaining rule priority.
+
+Validation client-side:
+
+* name required
+* ruleType required
+* targetValue required
+* matchType required
+* confidence 0 to 1
+* priority positive
+* at least one pattern for phrase/regex/combined
+* metadata conditions must be valid JSON
+
+---
+
+## 17. Profiler Test Panel
+
+Create component:
+
+```text
+apps/web-admin/components/profiler-rules/profiler-test-panel.tsx
+```
+
+Purpose:
+Allow admin to test how production profiler classifies a sample request.
+
+Fields:
+
+1. User message
+2. Optional metadata JSON
+3. Input tokens
+4. Estimated output tokens
+5. Profiler mode
+
+   * Mvp
+   * Production
+   * Hybrid
+
+Button:
+
+```text
+Test Profiler
+```
+
+Response display:
+
+1. Task type
+2. Task confidence
+3. Risk level
+4. Risk confidence
+5. Data sensitivity
+6. Sensitivity confidence
+7. Complexity score
+8. Complexity band
+9. Classification method
+10. Requires reasoning
+11. Requires structured output
+12. Contains PII
+13. Warnings
+14. Matched rules
+15. Safe signals
+
+Security warning:
+
+```text
+Test inputs are evaluated in memory and are not stored. Do not paste real secrets or highly sensitive data.
+```
+
+Frontend should not persist test input to localStorage.
+
+Do not log test prompt to console.
+
+---
+
+## 18. Explanation Card
+
+Add card:
+
+Title:
+
+```text
+Profiler Rules vs Routing Rules
+```
+
+Content:
+
+```text
+Profiler rules classify the request: task type, risk, sensitivity, and complexity.
+Routing rules act on that profile to choose a model tier, block the request, or require human review.
+```
+
+Example:
+
+```text
+Profiler Rule:
+"make this shorter" → taskType = summarization
+
+Routing Rule:
+taskType = summarization and riskLevel = low → cheap tier
+```
+
+---
+
+## 19. Mock Fallback
+
+Support mock mode:
+
+```text
+NEXT_PUBLIC_USE_MOCK_DATA=true
+```
+
+Create:
+
+```text
+apps/web-admin/lib/mock/profiler-rules-data.ts
+```
+
+Mock rules should not include secrets.
+
+---
+
+## 20. Documentation
+
+Create:
+
+```text
+docs/admin-profiler-rules-api.md
+```
+
+Include:
+
+1. Purpose
+2. Difference between profiler rules and routing rules
+3. Data model
+4. Endpoints
+5. Request/response examples
+6. Validation rules
+7. Testing endpoint
+8. Audit logging
+9. Security behavior
+10. Current limitations
+11. Future roadmap
+
+Update:
+
+```text
+docs/production-request-profiler.md
+```
+
+Add:
+
+* database-backed profiler rules
+* admin UI
+* test panel
+* feature flags
+* fallback to configured rules
+
+Update:
+
+```text
+docs/request-profiler.md
+```
+
+Add:
+
+* profiler rules can now be managed through admin UI
+
+Update:
+
+```text
+docs/architecture.md
+```
+
+Add:
+
+* Profiler Rules Admin module
+* database-backed profiler rule provider
+
+Update:
+
+```text
+apps/gateway-api/README.md
+```
+
+Add:
+
+* profiler rule API examples
+
+Update:
+
+```text
+apps/web-admin/README.md
+```
+
+Add:
+
+* Profiler Rules page overview
+
+---
+
+## 21. Tests
+
+Backend tests:
+
+1. Missing admin key cannot access profiler rules API.
+2. Invalid admin key cannot access profiler rules API.
+3. Valid admin key can list profiler rules.
+4. Create profiler rule succeeds.
+5. Create validates required fields.
+6. Create rejects invalid rule type.
+7. Create rejects invalid target value for rule type.
+8. Create rejects invalid match type.
+9. Create rejects invalid confidence.
+10. Create rejects invalid priority.
+11. Create rejects invalid regex.
+12. Create rejects secret-like metadata condition.
+13. Update profiler rule succeeds.
+14. Update increments version.
+15. Enable rule works.
+16. Disable rule works.
+17. Delete soft-deletes rule.
+18. List excludes deleted rules.
+19. Tenant isolation works.
+20. Create writes audit log.
+21. Update writes audit log.
+22. Enable writes audit log.
+23. Disable writes audit log.
+24. Delete writes audit log.
+25. Test endpoint returns profile.
+26. Test endpoint returns matched rules.
+27. Test endpoint does not persist raw prompt.
+28. Test endpoint audit log does not include raw prompt.
+29. Production profiler uses database task rules.
+30. Production profiler uses database risk rules.
+31. Production profiler uses database sensitivity rules.
+32. Production profiler falls back to configured rules when DB rules unavailable.
+33. Existing /v1/chat/completions still works.
+34. Existing routing rules still work.
+35. Existing budget enforcement still works.
+36. Existing analytics APIs still work.
+
+Frontend:
+
+1. TypeScript build passes.
+2. Lint passes if configured.
+3. Profiler Rules page loads.
+4. Create dialog validates required fields.
+5. Test panel renders profile result.
+6. No raw test input stored in localStorage.
+7. No console logging of test prompt.
+
+---
+
+## 22. Security Requirements
+
+1. Do not store raw test prompts.
+2. Do not log raw test prompts.
+3. Do not return normalized prompt text.
+4. Do not return sensitive matched values.
+5. Do not include API keys in profiler rule patterns.
+6. Do not expose admin key in logs.
+7. Do not expose API key hash.
+8. Do not expose provider credentials.
+9. Audit logs must be sanitized.
+10. Profiler rules must be tenant-scoped.
+11. Test endpoint must be tenant-scoped.
+12. No real external AI classifier calls.
+
+---
+
+## 23. Quality Requirements
+
+1. Backend must build successfully.
+2. Backend tests must pass.
+3. Frontend must build successfully.
+4. Frontend lint should pass if configured.
+5. Existing MVP profiler must remain available.
+6. Existing production profiler must continue working.
+7. Existing routing rule UI must continue working.
+8. Existing dashboard must continue working.
+9. Existing provider/model pages must continue working.
+10. Existing budget page must continue working.
+11. Existing API keys page must continue working.
+12. Existing audit logs page must continue working.
+13. Existing Docker Compose should not be broken.
+14. Existing GitHub Actions should not be broken.
+15. Documentation must be updated.
+16. Follow AGENTS.md strictly.
+
+---
+
+## 24. Commands to Run
+
+Run backend:
+
+```text
+dotnet restore
+dotnet build
+dotnet test
+```
+
+Run frontend:
+
+```text
+npm run lint --if-present
+npm run build
+```
+
+If Docker Compose or Bicep files are modified, also run relevant validation.
+
+Do not claim a command passed unless actually run.
+
+---
+
+## 25. Final Response
+
+After completion, provide:
+
+1. Summary of changes
+2. Files created or modified
+3. Backend profiler rule APIs implemented
+4. Database changes and migration name
+5. Production profiler integration changes
+6. Frontend Profiler Rules page behavior
+7. Profiler test panel behavior
+8. Security safeguards
+9. Tests added or updated
+10. Documentation updated
+11. Commands run
+12. Whether backend build passed
+13. Whether backend tests passed
+14. Whether frontend build passed
+15. Whether frontend lint passed
+16. Known limitations
+17. Recommended next step
+
+Recommended next step should be:
+Post-MVP Feature: Profiler Evaluation Dashboard.

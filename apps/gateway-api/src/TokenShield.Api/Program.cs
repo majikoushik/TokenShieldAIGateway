@@ -69,6 +69,8 @@ builder.Services.AddSingleton<ICostEngineService, CostEngineService>();
 builder.Services.AddScoped<IRoutingRuleEngine, RoutingRuleEngine>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();
 builder.Services.AddScoped<IAuditLoggingService, AuditLoggingService>();
+builder.Services.AddScoped<IProfilerRuleService, ProfilerRuleService>();
+builder.Services.AddScoped<IDatabaseProfilerRuleProvider, DatabaseProfilerRuleProvider>();
 
 // ─── HttpClient & Provider Adapters ───────────────────────────────────────
 builder.Services.AddHttpClient();
