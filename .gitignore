@@ -1,0 +1,240 @@
+###############################################################################
+# TokenShield AI Gateway — .gitignore
+# Stack: .NET 8 | Next.js / TypeScript | PostgreSQL | Docker | Azure
+###############################################################################
+
+# =============================================================================
+# SECRETS & CREDENTIALS  (security-first — never commit these)
+# =============================================================================
+*.env
+.env
+.env.*
+!.env.example
+!.env.template
+appsettings.*.json
+!appsettings.Development.json.example
+secrets.json
+**/secrets.json
+local.settings.json
+*.pfx
+*.p12
+*.key
+*.pem
+*.cer
+*.crt
+*.keystore
+
+# =============================================================================
+# .NET / C# / ASP.NET CORE
+# =============================================================================
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+!**/packages/build/
+nuget.config.user
+
+# Visual Studio artifacts
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.vscode/settings.json
+
+# Rider / JetBrains
+.idea/
+*.DotSettings.user
+
+# Test results
+TestResults/
+coverage/
+*.trx
+*.coveragexml
+*.coverage
+*.opencover.xml
+lcov.info
+/coverage-report/
+
+# EF Core migrations — keep migration files, ignore temp snapshots
+# (Uncomment the next line only if you intentionally exclude all migrations)
+# **/Migrations/
+
+# Publish output
+publish/
+**/publish/
+*.publishsettings
+
+# Azure Functions (not in MVP scope, but future-proof)
+local.settings.json
+
+# =============================================================================
+# NODE / NEXT.JS / TYPESCRIPT (apps/web-admin)
+# =============================================================================
+
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+.cache/
+.parcel-cache/
+
+# TypeScript compiled output
+*.js.map
+*.d.ts.map
+
+# Next.js specific
+.next/
+next-env.d.ts
+
+# Package manager locks — keep ONE lock file; ignore the others
+# If you use npm:
+# yarn.lock
+# pnpm-lock.yaml
+# If you use yarn:
+# package-lock.json
+# pnpm-lock.yaml
+# If you use pnpm:
+# package-lock.json
+# yarn.lock
+
+# Storybook
+storybook-static/
+
+# ESLint / Prettier cache
+.eslintcache
+.prettiercache
+.stylelintcache
+
+# =============================================================================
+# DOCKER
+# =============================================================================
+
+# Docker override files (local dev overrides should not be committed)
+docker-compose.override.yml
+docker-compose.local.yml
+.dockerignore.local
+
+# =============================================================================
+# POSTGRESQL / DATABASE
+# =============================================================================
+
+# Local database dumps / backups
+*.sql.bak
+*.dump
+*.pgdump
+*.backup
+pgdata/
+postgres-data/
+
+# =============================================================================
+# AZURE / CLOUD
+# =============================================================================
+
+# Azure CLI auth tokens
+.azure/
+azureauth.json
+*.azureauth
+
+# Bicep / ARM compiled outputs (re-generated from source)
+*.json.generated
+*.compiled.json
+
+# Terraform (future-proofing)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# =============================================================================
+# LOGS & RUNTIME ARTIFACTS
+# =============================================================================
+
+*.log
+*.log.*
+logs/
+serilog-*.txt
+applicationinsights.config
+ApplicationInsights.config
+
+# OpenTelemetry local collector config with secrets
+otel-collector-config.local.yaml
+
+# =============================================================================
+# OS & EDITOR ARTIFACTS
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# VS Code (share recommended extensions/settings via .vscode/*.json tracked files)
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# JetBrains Rider
+.idea/
+*.DotSettings.user
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# =============================================================================
+# TESTING & COVERAGE
+# =============================================================================
+
+TestResults/
+*.trx
+*.coveragexml
+coverage/
+coverage-report/
+lcov.info
+.nyc_output/
+jest-results/
+
+# =============================================================================
+# MISCELLANEOUS
+# =============================================================================
+
+# Scratch / temp files
+scratch/
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+
+# Generated API clients (re-generated from OpenAPI spec)
+**/generated/
+
+# Benchmark results
+BenchmarkDotNet.Artifacts/
