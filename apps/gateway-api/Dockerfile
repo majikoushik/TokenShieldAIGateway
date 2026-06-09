@@ -19,11 +19,20 @@ RUN dotnet restore src/TokenShield.Api/TokenShield.Api.csproj
 COPY src/ src/
 RUN dotnet publish src/TokenShield.Api/TokenShield.Api.csproj -c Release -o /app/publish --no-restore
 
-# Final runtime image
+# Final runtime image — use curl-enabled image for healthcheck
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+
+# Install curl for HEALTHCHECK (minimal footprint)
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY --from=build /app/publish .
+
 ENV ASPNETCORE_URLS=http://+:5000
-ENV ASPNETCORE_ENVIRONMENT=Development
 EXPOSE 5000
+
+# Liveness probe — fails fast if the process is unhealthy
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
+
 ENTRYPOINT ["dotnet", "TokenShield.Api.dll"]

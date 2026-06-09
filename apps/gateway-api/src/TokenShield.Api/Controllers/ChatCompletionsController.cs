@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TokenShield.Application.Common.Interfaces;
@@ -20,6 +21,7 @@ public class ChatCompletionsController : ControllerBase
     private readonly IRoutingRuleEngine _routingRuleEngine;
     private readonly IBudgetService _budgetService;
     private readonly IProviderExecutionService _providerExecutionService;
+    private readonly ITelemetryService _telemetry;
 
     public ChatCompletionsController(
         TokenShieldDbContext dbContext,
@@ -28,7 +30,8 @@ public class ChatCompletionsController : ControllerBase
         ICostEngineService costEngineService,
         IRoutingRuleEngine routingRuleEngine,
         IBudgetService budgetService,
-        IProviderExecutionService providerExecutionService)
+        IProviderExecutionService providerExecutionService,
+        ITelemetryService telemetry)
     {
         _dbContext = dbContext;
         _requestContext = requestContext;
@@ -37,11 +40,14 @@ public class ChatCompletionsController : ControllerBase
         _routingRuleEngine = routingRuleEngine;
         _budgetService = budgetService;
         _providerExecutionService = providerExecutionService;
+        _telemetry = telemetry;
     }
 
     [HttpPost]
     public async Task<IActionResult> Post([FromBody] ChatCompletionRequest request)
     {
+        var sw = Stopwatch.StartNew();
+        var requestId = $"chatcmpl_{Guid.NewGuid():N}";
         // 1. Validate incoming JSON payload parameters
         var validator = new ChatCompletionRequestValidator();
         var validationResult = await validator.ValidateAsync(request);
@@ -68,6 +74,17 @@ public class ChatCompletionsController : ControllerBase
         // 3. Create request profile (PII + taskType inference + complexity)
         var profile = _requestProfiler.ProfileRequest(request, inputTokens);
 
+        // Emit: AiRequestReceived
+        _telemetry.TrackAiRequestReceived(new()
+        {
+            CorrelationId = _requestContext.CorrelationId,
+            RequestId = Guid.TryParse(requestId.Replace("chatcmpl_", ""), out var rid) ? rid : Guid.NewGuid(),
+            TenantId = _requestContext.TenantId,
+            ApplicationId = _requestContext.ClientApplicationId,
+            InputTokens = inputTokens,
+            BudgetStatus = "Pending"
+        });
+
         // 4. Run pre-call budget checks (Tenant, Client Application, API Key)
         var preCallBudgetResult = await _budgetService.CheckBudgetPreCallAsync(
             _requestContext.TenantId,
@@ -76,6 +93,15 @@ public class ChatCompletionsController : ControllerBase
 
         if (preCallBudgetResult.IsBlocked)
         {
+            // Emit: AiBudgetExceeded
+            _telemetry.TrackBudgetExceeded(new()
+            {
+                CorrelationId = _requestContext.CorrelationId,
+                TenantId = _requestContext.TenantId,
+                ApplicationId = _requestContext.ClientApplicationId,
+                BudgetStatus = preCallBudgetResult.BudgetStatus,
+                LatencyMs = sw.ElapsedMilliseconds
+            });
             await LogRequestAsync(request, null, "Blocked", "Budget Exceeded", inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
@@ -90,6 +116,16 @@ public class ChatCompletionsController : ControllerBase
 
         // 5. Run rule-based matching policies
         var (action, selectedTier, matchedRuleName) = await _routingRuleEngine.MatchRuleAsync(_requestContext.TenantId, profile);
+
+        // Emit: AiRoutingDecisionMade
+        _telemetry.TrackRoutingDecisionMade(new()
+        {
+            CorrelationId = _requestContext.CorrelationId,
+            TenantId = _requestContext.TenantId,
+            ApplicationId = _requestContext.ClientApplicationId,
+            SelectedTier = selectedTier?.ToString() ?? "standard",
+            MatchedRule = matchedRuleName
+        });
 
         // 6. Handle action outcomes (Block or Human Review)
         if (action == RoutingActionType.Block)
@@ -134,6 +170,15 @@ public class ChatCompletionsController : ControllerBase
         }
 
         // 8. Execute via ProviderExecutionService (handling fallbacks & Polly retries)
+        // Emit: AiModelCalled
+        _telemetry.TrackAiModelCalled(new()
+        {
+            CorrelationId = _requestContext.CorrelationId,
+            TenantId = _requestContext.TenantId,
+            ApplicationId = _requestContext.ClientApplicationId,
+            SelectedTier = targetTier.ToString().ToLowerInvariant()
+        });
+
         ProviderExecutionResult executionResult;
         try
         {
@@ -142,8 +187,20 @@ public class ChatCompletionsController : ControllerBase
                 targetTier,
                 request,
                 HttpContext.RequestAborted);
+
+            // Emit: AiFallbackTriggered (if applicable)
+            if (executionResult.FallbackUsed)
+            {
+                _telemetry.TrackFallbackTriggered(new()
+                {
+                    CorrelationId = _requestContext.CorrelationId,
+                    TenantId = _requestContext.TenantId,
+                    ApplicationId = _requestContext.ClientApplicationId,
+                    SelectedTier = targetTier.ToString().ToLowerInvariant()
+                });
+            }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // Log failure to database request logs
             await LogRequestAsync(request, null, "Failed", matchedRuleName, inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
@@ -248,7 +305,27 @@ public class ChatCompletionsController : ControllerBase
         };
 
         // 11. Write log to request logs history
-        await LogRequestAsync(request, dbModel, "Success", matchedRuleName, promptTokens, completionTokens, estimatedCost, executionResult.ResponseText, finalBudgetStatus, executionResult.FallbackUsed);
+        sw.Stop();
+        await LogRequestAsync(request, dbModel, "Success", matchedRuleName, promptTokens, completionTokens, estimatedCost, executionResult.ResponseText, finalBudgetStatus, executionResult.FallbackUsed, sw.ElapsedMilliseconds);
+
+        // Emit: AiResponseReturned
+        _telemetry.TrackAiResponseReturned(new()
+        {
+            CorrelationId = _requestContext.CorrelationId,
+            TenantId = _requestContext.TenantId,
+            ApplicationId = _requestContext.ClientApplicationId,
+            SelectedProvider = dbModel.Provider.Name,
+            SelectedModel = dbModel.Name,
+            SelectedTier = targetTier.ToString().ToLowerInvariant(),
+            MatchedRule = matchedRuleName,
+            InputTokens = promptTokens,
+            OutputTokens = completionTokens,
+            EstimatedCost = estimatedCost,
+            LatencyMs = sw.ElapsedMilliseconds,
+            FallbackUsed = executionResult.FallbackUsed,
+            BudgetStatus = finalBudgetStatus,
+            RequestStatus = "Success"
+        });
 
         return Ok(response);
     }
@@ -263,7 +340,8 @@ public class ChatCompletionsController : ControllerBase
         decimal cost,
         string? responseText = null,
         string budgetStatus = "Within Limits",
-        bool fallbackUsed = false)
+        bool fallbackUsed = false,
+        long latencyMs = 0)
     {
         var promptHash = ComputeHash(string.Join("|", request.Messages.Select(m => $"{m.Role}:{m.Content}")));
         var responseHash = responseText != null ? ComputeHash(responseText) : ComputeHash("");
@@ -287,7 +365,7 @@ public class ChatCompletionsController : ControllerBase
             FallbackUsed = fallbackUsed,
             BudgetStatus = budgetStatus,
             RequestStatus = requestStatus,
-            LatencyMs = 45
+            LatencyMs = (int)Math.Min(latencyMs, int.MaxValue)
         };
 
         _dbContext.AiRequestLogs.Add(requestLog);

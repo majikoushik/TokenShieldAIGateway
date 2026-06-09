@@ -1,7 +1,14 @@
+# TokenShield AI Gateway — Local Development Stack
+# Run: docker compose up --build
+# Services: PostgreSQL (5432), gateway-api (5000), web-admin (3000)
+
 services:
+
+  # ── PostgreSQL Database ─────────────────────────────────────────────────────
   tokenshield-db:
     image: postgres:16-alpine
     container_name: tokenshield-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -16,32 +23,56 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Gateway API (.NET 8) ────────────────────────────────────────────────────
   gateway-api:
     build:
       context: ./apps/gateway-api
       dockerfile: Dockerfile
     container_name: tokenshield-gateway-api
+    restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: "http://+:5000"
       ConnectionStrings__DefaultConnection: "Host=tokenshield-db;Port=5432;Database=tokenshield;Username=postgres;Password=postgres"
+      SeedDatabase: "true"
+      # OpenTelemetry / Application Insights (set your connection string to enable cloud monitoring)
+      ApplicationInsights__ConnectionString: ""
+      OpenTelemetry__ServiceName: "tokenshield-gateway"
+      # CORS — add web-admin origin here in production
+      Cors__AllowedOrigins__0: "http://localhost:3000"
+      # Provider settings — real calls disabled by default; set to true only with valid credentials
+      Providers__UseRealProviders: "false"
     depends_on:
       tokenshield-db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
+  # ── Web Admin (Next.js) ─────────────────────────────────────────────────────
   web-admin:
     build:
       context: ./apps/web-admin
       dockerfile: Dockerfile
     container_name: tokenshield-web-admin
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       NODE_ENV: production
-      PORT: 3000
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      # API URL used by the Next.js frontend to reach the gateway-api container
+      NEXT_PUBLIC_API_URL: "http://gateway-api:5000"
     depends_on:
-      - gateway-api
+      gateway-api:
+        condition: service_healthy
 
 volumes:
   pgdata:
+    name: tokenshield_pgdata

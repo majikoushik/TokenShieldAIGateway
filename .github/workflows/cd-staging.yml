@@ -1,0 +1,122 @@
+name: CD — Staging
+
+# Deploy to Azure Container Apps on push to main, or manually
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      imageTag:
+        description: "Docker image tag to deploy (default: git SHA)"
+        required: false
+        type: string
+
+# Required GitHub repository secrets:
+#   AZURE_CLIENT_ID       — App registration client ID (OIDC)
+#   AZURE_TENANT_ID       — Azure tenant ID
+#   AZURE_SUBSCRIPTION_ID — Azure subscription ID
+#   ACR_NAME              — Azure Container Registry name (without .azurecr.io)
+#   RESOURCE_GROUP        — Target resource group name
+#   GATEWAY_APP_NAME      — Container App name for gateway-api
+#   WEBADMIN_APP_NAME     — Container App name for web-admin
+
+permissions:
+  id-token: write   # Required for OIDC
+  contents: read
+
+concurrency:
+  group: cd-staging
+  cancel-in-progress: false  # Never cancel an in-flight deployment
+
+jobs:
+  deploy-staging:
+    name: Deploy to Azure Container Apps (Staging)
+    runs-on: ubuntu-latest
+    environment: staging
+
+    env:
+      IMAGE_TAG: ${{ inputs.imageTag || github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── OIDC Login to Azure (no stored secrets) ────────────────────────────
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ── Build & Push: gateway-api ──────────────────────────────────────────
+      - name: Build and push gateway-api image
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.AZURE_CLIENT_ID }}
+          password: ${{ secrets.AZURE_CLIENT_ID }}  # OIDC-based — no password needed
+
+      - name: Build gateway-api Docker image
+        run: |
+          docker build \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/gateway-api:${{ env.IMAGE_TAG }} \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/gateway-api:latest \
+            apps/gateway-api
+
+      - name: Push gateway-api image
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME }}
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/gateway-api:${{ env.IMAGE_TAG }}
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/gateway-api:latest
+
+      # ── Build & Push: web-admin ────────────────────────────────────────────
+      - name: Build web-admin Docker image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=https://$(az containerapp show \
+              --name ${{ secrets.GATEWAY_APP_NAME }} \
+              --resource-group ${{ secrets.RESOURCE_GROUP }} \
+              --query properties.configuration.ingress.fqdn -o tsv) \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/web-admin:${{ env.IMAGE_TAG }} \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/web-admin:latest \
+            apps/web-admin
+
+      - name: Push web-admin image
+        run: |
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/web-admin:${{ env.IMAGE_TAG }}
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/web-admin:latest
+
+      # ── Update Container App Revisions ─────────────────────────────────────
+      - name: Update gateway-api Container App
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          appSourcePath: apps/gateway-api
+          acrName: ${{ secrets.ACR_NAME }}
+          containerAppName: ${{ secrets.GATEWAY_APP_NAME }}
+          resourceGroup: ${{ secrets.RESOURCE_GROUP }}
+          imageToDeploy: ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/gateway-api:${{ env.IMAGE_TAG }}
+
+      - name: Update web-admin Container App
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          appSourcePath: apps/web-admin
+          acrName: ${{ secrets.ACR_NAME }}
+          containerAppName: ${{ secrets.WEBADMIN_APP_NAME }}
+          resourceGroup: ${{ secrets.RESOURCE_GROUP }}
+          imageToDeploy: ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/web-admin:${{ env.IMAGE_TAG }}
+
+      # ── Smoke Test ─────────────────────────────────────────────────────────
+      - name: Smoke test — gateway health
+        run: |
+          FQDN=$(az containerapp show \
+            --name ${{ secrets.GATEWAY_APP_NAME }} \
+            --resource-group ${{ secrets.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Gateway FQDN: $FQDN"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$FQDN/health")
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed with status $STATUS"
+            exit 1
+          fi
+          echo "Health check passed (HTTP $STATUS)"

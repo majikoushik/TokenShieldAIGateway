@@ -1,8 +1,50 @@
 # TokenShield AI Gateway
 
-TokenShield AI Gateway is a production-grade AI FinOps, model-routing, and governance platform for enterprises. It acts as a centralized proxy between client applications and downstream AI model providers (such as OpenAI, Azure OpenAI, and Anthropic).
+> **Production-grade AI FinOps and model-routing gateway for enterprises.**
 
-This repository is set up as a clean monorepo containing both the .NET 8 backend API and the Next.js TypeScript administration frontend.
+TokenShield sits between your client applications and downstream AI model providers (OpenAI, Azure OpenAI, Anthropic). It enforces budget policies, routes requests to the right model tier, tracks costs, and gives operators full visibility via an admin console.
+
+[![CI](https://github.com/your-org/TokenShieldAIGateway/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/TokenShieldAIGateway/actions/workflows/ci.yml)
+
+---
+
+## Quick Start (Docker Compose)
+
+```bash
+# Clone and start all services
+git clone https://github.com/your-org/TokenShieldAIGateway.git
+cd TokenShieldAIGateway
+docker compose up --build
+```
+
+| Service | URL |
+|---|---|
+| Gateway API | http://localhost:5000 |
+| Swagger UI | http://localhost:5000/swagger |
+| Admin Console | http://localhost:3000 |
+| Health (liveness) | http://localhost:5000/health |
+| Health (readiness) | http://localhost:5000/health/ready |
+
+Create a development API key:
+
+```bash
+curl -X POST http://localhost:5000/api/dev/api-keys \
+  -H "Content-Type: application/json" \
+  -d '{"name":"local-dev","description":"Local dev key"}'
+```
+
+Test the gateway:
+
+```bash
+curl -X POST http://localhost:5000/v1/chat/completions \
+  -H "x-api-key: ts_dev_<key-from-above>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "auto",
+    "messages": [{"role": "user", "content": "Summarize this case"}],
+    "metadata": {"taskType": "summarization", "riskLevel": "low"}
+  }'
+```
 
 ---
 
@@ -11,60 +53,83 @@ This repository is set up as a clean monorepo containing both the .NET 8 backend
 ```text
 .
 ├── apps/
-│   ├── gateway-api/      # Backend: .NET 8 Clean Architecture gateway proxy
-│   └── web-admin/        # Frontend: Next.js TypeScript Admin console
-├── docs/                 # Product Specifications & Architecture documents
-├── infra/                # Infrastructure configurations & local Dockerfiles
-├── docker-compose.yml    # Root Docker Compose orchestrating DB & app services
-└── README.md             # This file
+│   ├── gateway-api/          # .NET 8 Clean Architecture AI gateway
+│   └── web-admin/            # Next.js TypeScript admin console
+├── docs/                     # Product specs & architecture docs
+│   ├── observability.md      # Logging, tracing, metrics guide
+│   └── deployment.md         # Local + Azure deployment guide
+├── infra/
+│   ├── bicep/                # Azure Bicep deployment foundation
+│   └── README.md             # Infrastructure setup guide
+├── .github/
+│   └── workflows/            # GitHub Actions CI/CD
+├── docker-compose.yml        # Local development stack
+└── README.md
 ```
 
 ---
 
-## Getting Started
+## Option 1: Local (Bare Metal)
 
-### Prerequisites
-- [.NET 8 SDK or .NET 10 SDK](https://dotnet.microsoft.com/download)
-- [Node.js (v22.x or higher) & npm](https://nodejs.org)
-- [Docker & Docker Compose](https://www.docker.com)
-- [PostgreSQL](https://www.postgresql.org) (optional, if running bare-metal locally)
+### Backend
 
----
-
-## Option 1: Running Locally (Bare Metal)
-
-### 1. Run the Backend API
-Navigate to the backend API directory and run:
 ```bash
 cd apps/gateway-api/src/TokenShield.Api
 dotnet run
 ```
-By default, the server runs on:
-- HTTP: `http://localhost:5000`
-- Swagger UI: `http://localhost:5000/swagger/index.html`
 
-Verification endpoints:
-- Health check: `GET http://localhost:5000/health`
-- Version check: `GET http://localhost:5000/api/version`
+Requires PostgreSQL running locally. Update `appsettings.Development.json` with your connection string.
 
-### 2. Run the Next.js Admin Console
-Navigate to the web admin directory, install dependencies, and run the development server:
+### Frontend
+
 ```bash
 cd apps/web-admin
 npm install
 npm run dev
 ```
-By default, the web panel runs on:
-- Web Admin: `http://localhost:3000`
 
 ---
 
-## Option 2: Running via Docker Compose
-To build and start all services (gateway-api, web-admin, and a local PostgreSQL database):
+## Option 2: Docker Compose
+
 ```bash
-docker compose up --build
+docker compose up --build       # Start all services
+docker compose down             # Stop (preserve data)
+docker compose down -v          # Stop + wipe PostgreSQL data
 ```
-This boots:
-- **Database**: PostgreSQL (port `5432` locally)
-- **Backend API**: Gateway API (mapped to `http://localhost:5000` with Swagger active)
-- **Frontend Panel**: Admin Web App (mapped to `http://localhost:3000`)
+
+---
+
+## Azure Deployment
+
+See [docs/deployment.md](docs/deployment.md) for full instructions including Bicep deployment, Key Vault secret management, and CI/CD setup.
+
+---
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| [Product Spec](docs/product-spec.md) | MVP goals and feature scope |
+| [Architecture](docs/architecture.md) | System design and component overview |
+| [Database Schema](docs/database-schema.md) | Entity model and EF Core design |
+| [Gateway API](docs/chat-completions-endpoint.md) | OpenAI-compatible gateway endpoint |
+| [Routing Rules](docs/routing-rules.md) | Rule engine and routing logic |
+| [Cost Engine](docs/cost-engine.md) | Token estimation and cost calculation |
+| [Budget Enforcement](docs/budget-enforcement.md) | Budget limits and actions |
+| [Provider Adapters](docs/provider-adapters.md) | Provider abstraction and adapters |
+| [Admin API](docs/admin-api.md) | Admin REST API reference |
+| [Observability](docs/observability.md) | Logging, tracing, metrics, AppInsights |
+| [Deployment](docs/deployment.md) | Local + Azure deployment guide |
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | .NET 8, ASP.NET Core, EF Core, PostgreSQL |
+| Frontend | Next.js 14, TypeScript, Tailwind CSS |
+| Observability | Serilog, OpenTelemetry, Application Insights |
+| Infrastructure | Azure Container Apps, PostgreSQL Flexible Server, Key Vault |
+| CI/CD | GitHub Actions (OIDC, no stored secrets) |

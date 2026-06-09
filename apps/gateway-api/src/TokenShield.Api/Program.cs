@@ -10,26 +10,36 @@ using TokenShield.Guardrails.Profiling;
 using TokenShield.CostEngine.Services;
 using TokenShield.PolicyEngine.Engine;
 using TokenShield.Observability.Services;
+using TokenShield.Observability.Extensions;
 using TokenShield.ProviderAdapters;
 using TokenShield.ProviderAdapters.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure structured logging with Serilog
+// ─── Structured Logging with Serilog ───────────────────────────────────────
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
+    .Enrich.WithProperty("ServiceName", builder.Configuration["OpenTelemetry:ServiceName"] ?? "tokenshield-gateway")
     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 builder.Host.UseSerilog();
 
-// Add DbContext with Npgsql PostgreSQL configuration
+// ─── OpenTelemetry + Application Insights Observability ────────────────────
+builder.Services.AddTokenShieldObservability(builder.Configuration);
+builder.Logging.AddTokenShieldLogging(builder.Configuration);
+
+// ─── Database ──────────────────────────────────────────────────────────────
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<TokenShieldDbContext>(options =>
     options.UseNpgsql(connectionString, b => b.MigrationsAssembly("TokenShield.Infrastructure")));
 
-// Register Scoped & Singleton Services for Gateway Core Slice
+// ─── Health Checks ─────────────────────────────────────────────────────────
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<TokenShieldDbContext>("database", tags: ["ready"]);
+
+// ─── Application Services ──────────────────────────────────────────────────
 builder.Services.AddScoped<IRequestContext, RequestContext>();
 builder.Services.AddSingleton<ApiKeyService>();
 builder.Services.AddSingleton<IRequestProfiler, RequestProfiler>();
@@ -38,10 +48,8 @@ builder.Services.AddScoped<IRoutingRuleEngine, RoutingRuleEngine>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();
 builder.Services.AddScoped<IAuditLoggingService, AuditLoggingService>();
 
-// Register HttpClientFactory
+// ─── HttpClient & Provider Adapters ───────────────────────────────────────
 builder.Services.AddHttpClient();
-
-// Register Provider Adapters & Factory
 builder.Services.AddTransient<MockProviderAdapter>();
 builder.Services.AddTransient<OpenAiProviderAdapter>();
 builder.Services.AddTransient<AzureOpenAiProviderAdapter>();
@@ -49,30 +57,64 @@ builder.Services.AddTransient<AnthropicProviderAdapter>();
 builder.Services.AddScoped<IProviderAdapterFactory, ProviderAdapterFactory>();
 builder.Services.AddScoped<IProviderExecutionService, ProviderExecutionService>();
 
-// Add controllers support
+// ─── Controllers & Swagger ─────────────────────────────────────────────────
 builder.Services.AddControllers();
-
-// Add Swagger / OpenAPI services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new() { Title = "TokenShield AI Gateway API", Version = "v1" });
+    options.SwaggerDoc("v1", new()
+    {
+        Title = "TokenShield AI Gateway API",
+        Version = "v1",
+        Description = "Production-grade AI FinOps and model-routing gateway for enterprises."
+    });
+    options.AddSecurityDefinition("ApiKey", new()
+    {
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Name = "x-api-key",
+        Description = "Gateway API key (ts_live_xxx or ts_dev_xxx)"
+    });
+    options.AddSecurityRequirement(new()
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new() { Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "ApiKey" }
+            },
+            Array.Empty<string>()
+        }
+    });
 });
 
-// Configure CORS Policy (Placeholder for MVP, restrict in production)
+// ─── CORS ──────────────────────────────────────────────────────────────────
+// In Development: allow any origin for easy local development
+// In Production: restrict to configured AllowedOrigins only
+var isDevelopment = builder.Environment.IsDevelopment();
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAllLocal", policy =>
+    if (isDevelopment)
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
+        options.AddPolicy("GatewayPolicy", policy =>
+            policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+    }
+    else
+    {
+        var allowedOrigins = builder.Configuration
+            .GetSection("Cors:AllowedOrigins")
+            .Get<string[]>() ?? [];
+
+        options.AddPolicy("GatewayPolicy", policy =>
+            policy.WithOrigins(allowedOrigins)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials());
+    }
 });
 
 var app = builder.Build();
 
-// Configure HTTP request pipeline execution order
+// ─── Middleware Pipeline ────────────────────────────────────────────────────
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
@@ -83,9 +125,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "TokenShield API v1");
+        c.DocumentTitle = "TokenShield AI Gateway";
     });
 
-    // Run database initializer / idempotent seed
     var seedEnabled = builder.Configuration.GetValue<bool>("SeedDatabase", true);
     if (seedEnabled)
     {
@@ -94,18 +136,37 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-app.UseCors("AllowAllLocal");
-
-// Map Controllers routes
+app.UseCors("GatewayPolicy");
 app.MapControllers();
 
-// GET /health - Public Endpoint
-app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }))
-   .WithName("HealthCheck")
-   .WithOpenApi();
+// ─── Public Endpoints ──────────────────────────────────────────────────────
 
-// GET /api/version - Public Endpoint
+// GET /health — lightweight liveness probe
+app.MapGet("/health", () => Results.Ok(new
+{
+    status = "Healthy",
+    service = "tokenshield-gateway",
+    timestamp = DateTime.UtcNow
+}))
+.WithName("HealthLiveness")
+.WithTags("Health")
+.WithOpenApi()
+.AllowAnonymous();
+
+// GET /health/ready — readiness probe (includes database check)
+app.MapGet("/health/ready", async (Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService healthCheckService) =>
+{
+    var report = await healthCheckService.CheckHealthAsync(reg => reg.Tags.Contains("ready"));
+    return report.Status == Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy
+        ? Results.Ok(new { status = "Ready", checks = report.Entries.Select(e => new { name = e.Key, status = e.Value.Status.ToString() }) })
+        : Results.Json(new { status = "Degraded", checks = report.Entries.Select(e => new { name = e.Key, status = e.Value.Status.ToString(), description = e.Value.Description }) }, statusCode: 503);
+})
+.WithName("HealthReadiness")
+.WithTags("Health")
+.WithOpenApi()
+.AllowAnonymous();
+
+// GET /api/version — public version metadata
 app.MapGet("/api/version", () => Results.Ok(new
 {
     productName = "TokenShield AI Gateway",
@@ -114,11 +175,12 @@ app.MapGet("/api/version", () => Results.Ok(new
     serverTime = DateTime.UtcNow
 }))
 .WithName("GetVersion")
+.WithTags("System")
 .WithOpenApi();
 
 try
 {
-    Log.Information("Starting TokenShield AI Gateway API...");
+    Log.Information("Starting TokenShield AI Gateway (env={Environment})", app.Environment.EnvironmentName);
     app.Run();
 }
 catch (Exception ex)
