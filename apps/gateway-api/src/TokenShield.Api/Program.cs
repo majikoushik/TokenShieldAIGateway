@@ -5,6 +5,11 @@ using TokenShield.Api.Services;
 using TokenShield.Application.Common.Interfaces;
 using TokenShield.Application.Services;
 using TokenShield.Infrastructure.Persistence;
+using TokenShield.Infrastructure.Services;
+using TokenShield.Guardrails.Profiling;
+using TokenShield.CostEngine.Services;
+using TokenShield.PolicyEngine.Engine;
+using TokenShield.Observability.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +30,11 @@ builder.Services.AddDbContext<TokenShieldDbContext>(options =>
 // Register Scoped & Singleton Services for Gateway Core Slice
 builder.Services.AddScoped<IRequestContext, RequestContext>();
 builder.Services.AddSingleton<ApiKeyService>();
+builder.Services.AddSingleton<IRequestProfiler, RequestProfiler>();
+builder.Services.AddSingleton<ICostEngineService, CostEngineService>();
+builder.Services.AddScoped<IRoutingRuleEngine, RoutingRuleEngine>();
+builder.Services.AddScoped<IBudgetService, BudgetService>();
+builder.Services.AddScoped<IAuditLoggingService, AuditLoggingService>();
 
 // Add controllers support
 builder.Services.AddControllers();

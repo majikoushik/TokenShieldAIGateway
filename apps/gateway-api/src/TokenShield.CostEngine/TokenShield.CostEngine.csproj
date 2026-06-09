@@ -1,7 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\TokenShield.Domain\TokenShield.Domain.csproj" />
+    <ProjectReference Include="..\TokenShield.Application\TokenShield.Application.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

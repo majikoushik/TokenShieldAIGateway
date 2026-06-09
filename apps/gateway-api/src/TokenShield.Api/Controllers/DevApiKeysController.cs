@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
+using TokenShield.Application.Common.Interfaces;
 using TokenShield.Application.Services;
 using TokenShield.Domain.Entities;
 using TokenShield.Infrastructure.Persistence;
@@ -15,12 +16,14 @@ public class DevApiKeysController : ControllerBase
     private readonly TokenShieldDbContext _context;
     private readonly ApiKeyService _apiKeyService;
     private readonly IWebHostEnvironment _env;
+    private readonly IAuditLoggingService _auditLoggingService;
 
-    public DevApiKeysController(TokenShieldDbContext context, ApiKeyService apiKeyService, IWebHostEnvironment env)
+    public DevApiKeysController(TokenShieldDbContext context, ApiKeyService apiKeyService, IWebHostEnvironment env, IAuditLoggingService auditLoggingService)
     {
         _context = context;
         _apiKeyService = apiKeyService;
         _env = env;
+        _auditLoggingService = auditLoggingService;
     }
 
     [HttpPost]
@@ -62,17 +65,14 @@ public class DevApiKeysController : ControllerBase
         _context.ApiKeys.Add(apiKey);
         await _context.SaveChangesAsync();
 
-        // Audit the key creation
-        _context.AuditLogs.Add(new AuditLog
-        {
-            TenantId = request.TenantId,
-            ActionName = "CreateApiKey",
-            EntityName = "ApiKey",
-            EntityId = apiKey.Id,
-            ActorEmail = "dev-environment@tokenshield.local",
-            DetailsJson = $"{{\"keyName\":\"{apiKey.Name}\",\"prefix\":\"{apiKey.Prefix}\"}}"
-        });
-        await _context.SaveChangesAsync();
+        // Audit the key creation using the unified Audit Logging Service
+        await _auditLoggingService.LogActionAsync(
+            request.TenantId,
+            "CreateApiKey",
+            "ApiKey",
+            apiKey.Id,
+            "dev-environment@tokenshield.local",
+            new { keyName = apiKey.Name, prefix = apiKey.Prefix });
 
         return Ok(new
         {

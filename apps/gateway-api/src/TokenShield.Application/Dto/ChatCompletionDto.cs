@@ -102,4 +102,10 @@ public class RoutingInfo
 
     [JsonPropertyName("cacheHit")]
     public bool CacheHit { get; set; }
+
+    [JsonPropertyName("budgetStatus")]
+    public string BudgetStatus { get; set; } = "Within Limits";
+
+    [JsonPropertyName("warning")]
+    public string? Warning { get; set; }
 }
