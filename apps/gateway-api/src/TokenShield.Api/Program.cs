@@ -10,6 +10,8 @@ using TokenShield.Guardrails.Profiling;
 using TokenShield.CostEngine.Services;
 using TokenShield.PolicyEngine.Engine;
 using TokenShield.Observability.Services;
+using TokenShield.ProviderAdapters;
+using TokenShield.ProviderAdapters.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +37,17 @@ builder.Services.AddSingleton<ICostEngineService, CostEngineService>();
 builder.Services.AddScoped<IRoutingRuleEngine, RoutingRuleEngine>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();
 builder.Services.AddScoped<IAuditLoggingService, AuditLoggingService>();
+
+// Register HttpClientFactory
+builder.Services.AddHttpClient();
+
+// Register Provider Adapters & Factory
+builder.Services.AddTransient<MockProviderAdapter>();
+builder.Services.AddTransient<OpenAiProviderAdapter>();
+builder.Services.AddTransient<AzureOpenAiProviderAdapter>();
+builder.Services.AddTransient<AnthropicProviderAdapter>();
+builder.Services.AddScoped<IProviderAdapterFactory, ProviderAdapterFactory>();
+builder.Services.AddScoped<IProviderExecutionService, ProviderExecutionService>();
 
 // Add controllers support
 builder.Services.AddControllers();

@@ -19,6 +19,7 @@ public class ChatCompletionsController : ControllerBase
     private readonly ICostEngineService _costEngineService;
     private readonly IRoutingRuleEngine _routingRuleEngine;
     private readonly IBudgetService _budgetService;
+    private readonly IProviderExecutionService _providerExecutionService;
 
     public ChatCompletionsController(
         TokenShieldDbContext dbContext,
@@ -26,7 +27,8 @@ public class ChatCompletionsController : ControllerBase
         IRequestProfiler requestProfiler,
         ICostEngineService costEngineService,
         IRoutingRuleEngine routingRuleEngine,
-        IBudgetService budgetService)
+        IBudgetService budgetService,
+        IProviderExecutionService providerExecutionService)
     {
         _dbContext = dbContext;
         _requestContext = requestContext;
@@ -34,6 +36,7 @@ public class ChatCompletionsController : ControllerBase
         _costEngineService = costEngineService;
         _routingRuleEngine = routingRuleEngine;
         _budgetService = budgetService;
+        _providerExecutionService = providerExecutionService;
     }
 
     [HttpPost]
@@ -130,44 +133,29 @@ public class ChatCompletionsController : ControllerBase
             };
         }
 
-        // 8. Select model from database based on selected tier
-        var dbModel = await _dbContext.AiModels
-            .Include(m => m.Provider)
-            .FirstOrDefaultAsync(m => m.Provider.TenantId == _requestContext.TenantId && m.Tier == targetTier && m.IsActive);
-
-        // Fallback to Standard model if tier has no active models seeded
-        if (dbModel == null)
+        // 8. Execute via ProviderExecutionService (handling fallbacks & Polly retries)
+        ProviderExecutionResult executionResult;
+        try
         {
-            dbModel = await _dbContext.AiModels
-                .Include(m => m.Provider)
-                .FirstOrDefaultAsync(m => m.Provider.TenantId == _requestContext.TenantId && m.IsActive);
+            executionResult = await _providerExecutionService.ExecuteWithFallbackAsync(
+                _requestContext.TenantId,
+                targetTier,
+                request,
+                HttpContext.RequestAborted);
         }
-
-        if (dbModel == null)
+        catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, new
+            // Log failure to database request logs
+            await LogRequestAsync(request, null, "Failed", matchedRuleName, inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
+
+            // Normalize provider exceptions into safe generic error payload
+            return StatusCode(StatusCodes.Status502BadGateway, new
             {
                 error = new
                 {
-                    message = "No active models found for routing target.",
-                    type = "model_resolution_error",
-                    code = "500"
-                }
-            });
-        }
-
-        // 9. Run post-selection budget checks (Model)
-        var modelBudgetResult = await _budgetService.CheckModelBudgetAsync(_requestContext.TenantId, dbModel.Id);
-        if (modelBudgetResult.IsBlocked)
-        {
-            await LogRequestAsync(request, dbModel, "Blocked", "Model Budget Exceeded", inputTokens, 0, 0m, budgetStatus: modelBudgetResult.BudgetStatus);
-            return StatusCode(StatusCodes.Status403Forbidden, new
-            {
-                error = new
-                {
-                    message = modelBudgetResult.WarningMessage ?? "Model budget limit exceeded.",
-                    type = "budget_exceeded",
-                    code = "403"
+                    message = "Provider error occurred while processing chat completion request.",
+                    type = "provider_error",
+                    code = "502"
                 }
             });
         }
@@ -176,38 +164,54 @@ public class ChatCompletionsController : ControllerBase
         var finalBudgetStatus = "Within Limits";
         string? warningMessage = null;
 
-        if (modelBudgetResult.IsBlocked || preCallBudgetResult.IsBlocked)
+        if (executionResult.ModelBudgetStatus == "Exceeded" || preCallBudgetResult.IsBlocked)
         {
             finalBudgetStatus = "Exceeded";
-            warningMessage = modelBudgetResult.WarningMessage ?? preCallBudgetResult.WarningMessage;
+            warningMessage = executionResult.ModelBudgetWarningMessage ?? preCallBudgetResult.WarningMessage;
         }
-        else if (modelBudgetResult.IsDowngraded || preCallBudgetResult.IsDowngraded)
+        else if (executionResult.ModelBudgetStatus == "Downgraded" || preCallBudgetResult.IsDowngraded)
         {
             finalBudgetStatus = "Downgraded";
-            warningMessage = modelBudgetResult.WarningMessage ?? preCallBudgetResult.WarningMessage;
+            warningMessage = executionResult.ModelBudgetWarningMessage ?? preCallBudgetResult.WarningMessage;
         }
-        else if (modelBudgetResult.IsWarning || preCallBudgetResult.IsWarning)
+        else if (executionResult.ModelBudgetIsWarning || preCallBudgetResult.IsWarning)
         {
             finalBudgetStatus = "Warning";
-            warningMessage = modelBudgetResult.WarningMessage ?? preCallBudgetResult.WarningMessage;
+            warningMessage = executionResult.ModelBudgetWarningMessage ?? preCallBudgetResult.WarningMessage;
         }
 
-        // 10. Mock completion response content
-        var responseText = "Hello! I am a simulated response from TokenShield AI Gateway. Your request passed validation, authentication, and routing checks successfully.";
-        var completionTokens = _costEngineService.EstimateTokens(responseText);
-        var totalTokens = inputTokens + completionTokens;
+        var completionTokens = executionResult.CompletionTokens;
+        var promptTokens = executionResult.PromptTokens;
+        var totalTokens = promptTokens + completionTokens;
 
-        // 11. Cost calculations using decimal arithmetic
-        var inputCost = _costEngineService.CalculateCost(inputTokens, dbModel.InputTokenPricePerMillion);
+        // 9. Cost calculations using decimal arithmetic for the model actually used
+        var dbModel = await _dbContext.AiModels
+            .Include(m => m.Provider)
+            .FirstOrDefaultAsync(m => m.Id == executionResult.ModelId);
+
+        if (dbModel == null)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                error = new
+                {
+                    message = "Successful model failed to load from database for cost mapping.",
+                    type = "model_resolution_error",
+                    code = "500"
+                }
+            });
+        }
+
+        var inputCost = _costEngineService.CalculateCost(promptTokens, dbModel.InputTokenPricePerMillion);
         var outputCost = _costEngineService.CalculateCost(completionTokens, dbModel.OutputTokenPricePerMillion);
         var estimatedCost = inputCost + outputCost;
 
-        // Update active budget spends
+        // 10. Update active budget spends
         await _budgetService.UpdateBudgetSpendAsync(_requestContext.TenantId, _requestContext.ClientApplicationId, _requestContext.ApiKeyId, dbModel.Id, estimatedCost);
 
         var response = new ChatCompletionResponse
         {
-            Id = $"chatcmpl_mock_{Guid.NewGuid():N}",
+            Id = $"chatcmpl_{Guid.NewGuid():N}",
             Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             Model = $"routed:{dbModel.Name}",
             Choices = new()
@@ -218,14 +222,14 @@ public class ChatCompletionsController : ControllerBase
                     Message = new ChatMessage
                     {
                         Role = "assistant",
-                        Content = responseText
+                        Content = executionResult.ResponseText
                     },
                     FinishReason = "stop"
                 }
             },
             Usage = new UsageInfo
             {
-                PromptTokens = inputTokens,
+                PromptTokens = promptTokens,
                 CompletionTokens = completionTokens,
                 TotalTokens = totalTokens
             },
@@ -236,15 +240,15 @@ public class ChatCompletionsController : ControllerBase
                 SelectedModel = dbModel.Name,
                 MatchedRule = matchedRuleName,
                 EstimatedCost = estimatedCost,
-                FallbackUsed = false,
+                FallbackUsed = executionResult.FallbackUsed,
                 CacheHit = false,
                 BudgetStatus = finalBudgetStatus,
                 Warning = warningMessage
             }
         };
 
-        // 12. Write log to request logs history
-        await LogRequestAsync(request, dbModel, "Success", matchedRuleName, inputTokens, completionTokens, estimatedCost, responseText, finalBudgetStatus);
+        // 11. Write log to request logs history
+        await LogRequestAsync(request, dbModel, "Success", matchedRuleName, promptTokens, completionTokens, estimatedCost, executionResult.ResponseText, finalBudgetStatus, executionResult.FallbackUsed);
 
         return Ok(response);
     }
@@ -258,7 +262,8 @@ public class ChatCompletionsController : ControllerBase
         int outputTokens,
         decimal cost,
         string? responseText = null,
-        string budgetStatus = "Within Limits")
+        string budgetStatus = "Within Limits",
+        bool fallbackUsed = false)
     {
         var promptHash = ComputeHash(string.Join("|", request.Messages.Select(m => $"{m.Role}:{m.Content}")));
         var responseHash = responseText != null ? ComputeHash(responseText) : ComputeHash("");
@@ -279,7 +284,7 @@ public class ChatCompletionsController : ControllerBase
             SelectedModel = model?.Name ?? "None",
             SelectedTier = model?.Tier.ToString() ?? "None",
             MatchedRuleName = matchedRuleName,
-            FallbackUsed = false,
+            FallbackUsed = fallbackUsed,
             BudgetStatus = budgetStatus,
             RequestStatus = requestStatus,
             LatencyMs = 45
