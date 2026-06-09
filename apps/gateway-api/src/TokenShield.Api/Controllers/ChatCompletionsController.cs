@@ -102,7 +102,7 @@ public class ChatCompletionsController : ControllerBase
                 BudgetStatus = preCallBudgetResult.BudgetStatus,
                 LatencyMs = sw.ElapsedMilliseconds
             });
-            await LogRequestAsync(request, null, "Blocked", "Budget Exceeded", inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
+            await LogRequestAsync(requestId, request, null, "Blocked", "Budget Exceeded", inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
                 error = new
@@ -130,7 +130,7 @@ public class ChatCompletionsController : ControllerBase
         // 6. Handle action outcomes (Block or Human Review)
         if (action == RoutingActionType.Block)
         {
-            await LogRequestAsync(request, null, "Blocked", matchedRuleName, inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
+            await LogRequestAsync(requestId, request, null, "Blocked", matchedRuleName, inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
                 error = new
@@ -144,7 +144,7 @@ public class ChatCompletionsController : ControllerBase
 
         if (action == RoutingActionType.HumanReview)
         {
-            await LogRequestAsync(request, null, "HumanReviewRequired", matchedRuleName, inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
+            await LogRequestAsync(requestId, request, null, "HumanReviewRequired", matchedRuleName, inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
             return StatusCode(StatusCodes.Status422UnprocessableEntity, new
             {
                 error = new
@@ -203,7 +203,7 @@ public class ChatCompletionsController : ControllerBase
         catch (Exception)
         {
             // Log failure to database request logs
-            await LogRequestAsync(request, null, "Failed", matchedRuleName, inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
+            await LogRequestAsync(requestId, request, null, "Failed", matchedRuleName, inputTokens, 0, 0m, budgetStatus: preCallBudgetResult.BudgetStatus);
 
             // Normalize provider exceptions into safe generic error payload
             return StatusCode(StatusCodes.Status502BadGateway, new
@@ -268,7 +268,7 @@ public class ChatCompletionsController : ControllerBase
 
         var response = new ChatCompletionResponse
         {
-            Id = $"chatcmpl_{Guid.NewGuid():N}",
+            Id = requestId,
             Created = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             Model = $"routed:{dbModel.Name}",
             Choices = new()
@@ -306,7 +306,7 @@ public class ChatCompletionsController : ControllerBase
 
         // 11. Write log to request logs history
         sw.Stop();
-        await LogRequestAsync(request, dbModel, "Success", matchedRuleName, promptTokens, completionTokens, estimatedCost, executionResult.ResponseText, finalBudgetStatus, executionResult.FallbackUsed, sw.ElapsedMilliseconds);
+        await LogRequestAsync(requestId, request, dbModel, "Success", matchedRuleName, promptTokens, completionTokens, estimatedCost, executionResult.ResponseText, finalBudgetStatus, executionResult.FallbackUsed, sw.ElapsedMilliseconds);
 
         // Emit: AiResponseReturned
         _telemetry.TrackAiResponseReturned(new()
@@ -331,6 +331,7 @@ public class ChatCompletionsController : ControllerBase
     }
 
     private async Task LogRequestAsync(
+        string requestId,
         ChatCompletionRequest request,
         AiModel? model,
         string requestStatus,
@@ -349,7 +350,7 @@ public class ChatCompletionsController : ControllerBase
         var requestLog = new AiRequestLog
         {
             CorrelationId = _requestContext.CorrelationId,
-            RequestId = $"chatcmpl_mock_{Guid.NewGuid():N}",
+            RequestId = requestId ?? $"chatcmpl_mock_{Guid.NewGuid():N}",
             TenantId = _requestContext.TenantId,
             ApplicationId = _requestContext.ClientApplicationId,
             ApiKeyId = _requestContext.ApiKeyId,

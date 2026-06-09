@@ -119,6 +119,12 @@ app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
 
+// ─── Database Initialization ───────────────────────────────────────────────
+// Migrations run in ALL environments (Development + Production).
+// Seeding only runs when SeedDatabase=true (default true in Development, false in Production).
+var seedEnabled = builder.Configuration.GetValue<bool>("SeedDatabase",
+    defaultValue: app.Environment.IsDevelopment()); // true by default in Dev, false in Prod
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -127,13 +133,10 @@ if (app.Environment.IsDevelopment())
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "TokenShield API v1");
         c.DocumentTitle = "TokenShield AI Gateway";
     });
-
-    var seedEnabled = builder.Configuration.GetValue<bool>("SeedDatabase", true);
-    if (seedEnabled)
-    {
-        await DbInitializer.InitializeAsync(app.Services);
-    }
 }
+
+// Apply pending EF Core migrations and optionally seed data
+await DbInitializer.InitializeAsync(app.Services, seedEnabled);
 
 app.UseHttpsRedirection();
 app.UseCors("GatewayPolicy");

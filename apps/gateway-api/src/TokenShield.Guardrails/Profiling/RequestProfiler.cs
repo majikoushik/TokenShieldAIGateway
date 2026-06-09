@@ -17,7 +17,7 @@ public class RequestProfiler : IRequestProfiler
         // 1. Resolve from Metadata (priority settings)
         var metadata = request.Metadata ?? new Dictionary<string, string>();
 
-        profile.RiskLevel = GetMetadataValue(metadata, "riskLevel", "medium").ToLowerInvariant();
+        profile.RiskLevel = (GetMetadataValue(metadata, "riskLevel", "medium") ?? "medium").ToLowerInvariant();
         profile.Department = GetMetadataValue(metadata, "department", null);
         profile.Environment = GetMetadataValue(metadata, "environment", null);
         

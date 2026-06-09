@@ -10,7 +10,7 @@ namespace TokenShield.Infrastructure.Persistence;
 
 public static class DbInitializer
 {
-    public static async Task InitializeAsync(IServiceProvider serviceProvider)
+    public static async Task InitializeAsync(IServiceProvider serviceProvider, bool seedData = true)
     {
         using var scope = serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<TokenShieldDbContext>();
@@ -25,8 +25,15 @@ public static class DbInitializer
                 await context.Database.MigrateAsync();
             }
 
-            logger.LogInformation("Running database seeding checks...");
-            await SeedDataAsync(context, logger);
+            if (seedData)
+            {
+                logger.LogInformation("Running database seeding checks...");
+                await SeedDataAsync(context, logger);
+            }
+            else
+            {
+                logger.LogInformation("Database seeding skipped (SeedDatabase=false).");
+            }
         }
         catch (Exception ex)
         {

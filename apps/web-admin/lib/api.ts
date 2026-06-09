@@ -24,10 +24,9 @@ async function safeFetch(path: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${path}`;
   const headers = new Headers(options.headers);
   
-  // Add default tenant header for MVP context resolution
-  if (!headers.has("x-tenant-id")) {
-    headers.set("x-tenant-id", "00000000-0000-0000-0000-000000000000"); // default seeded tenant fallback
-  }
+  // x-user-email identifies the actor for audit log purposes in MVP mode.
+  // x-tenant-id is NOT set here — the backend resolves it from the seeded demo tenant.
+  // In production this will be replaced by Azure Entra ID claims.
   if (!headers.has("x-user-email")) {
     headers.set("x-user-email", "admin@tokenshield.local");
   }
@@ -39,7 +38,7 @@ async function safeFetch(path: string, options: RequestInit = {}) {
       const errBody = await res.json().catch(() => ({}));
       throw new Error(errBody.error || errBody.errors?.join(", ") || `HTTP error ${res.status}`);
     }
-    if (res.status === 240 || res.status === 204) {
+    if (res.status === 204) {
       return null;
     }
     return await res.json();

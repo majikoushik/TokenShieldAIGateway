@@ -121,6 +121,7 @@ See [docs/deployment.md](docs/deployment.md) for full instructions including Bic
 | [Admin API](docs/admin-api.md) | Admin REST API reference |
 | [Observability](docs/observability.md) | Logging, tracing, metrics, AppInsights |
 | [Deployment](docs/deployment.md) | Local + Azure deployment guide |
+| [MVP Verification](docs/mvp-verification-report.md) | Final MVP test results and security review |
 
 ---
 
