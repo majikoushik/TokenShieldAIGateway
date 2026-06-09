@@ -16,7 +16,7 @@ We seed a primary hashed development API key. This raw key is ready for immediat
 - **Credential Header**: `x-api-key`
 - **Raw API Key**: `ts_dev_acmedeveloperkey12345`
 - **Prefix**: `ts_dev_`
-- **Key Hash (Stored in Database)**: `cf53c1fb85e3a891e4a13d72cd1a4030612c6a084c7942cc65a23053bb09a56e`
+- **Key Hash (Stored in Database)**: `dead2ed75455a9d40cacc439bb04e85eeddef56b7966ce418d4a6b70851ac77b`
 - **Expiry**: 1 Year from creation.
 
 ---

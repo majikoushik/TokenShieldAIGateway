@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using TokenShield.Api.Middleware;
+using TokenShield.Api.Services;
+using TokenShield.Application.Common.Interfaces;
+using TokenShield.Application.Services;
 using TokenShield.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,7 +22,14 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<TokenShieldDbContext>(options =>
     options.UseNpgsql(connectionString, b => b.MigrationsAssembly("TokenShield.Infrastructure")));
 
-// Add services to the container
+// Register Scoped & Singleton Services for Gateway Core Slice
+builder.Services.AddScoped<IRequestContext, RequestContext>();
+builder.Services.AddSingleton<ApiKeyService>();
+
+// Add controllers support
+builder.Services.AddControllers();
+
+// Add Swagger / OpenAPI services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -39,8 +49,10 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
+// Configure HTTP request pipeline execution order
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -61,6 +73,9 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors("AllowAllLocal");
+
+// Map Controllers routes
+app.MapControllers();
 
 // GET /health - Public Endpoint
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }))
