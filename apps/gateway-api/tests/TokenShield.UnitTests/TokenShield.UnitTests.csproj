@@ -31,6 +31,7 @@
     <ProjectReference Include="..\..\src\TokenShield.Observability\TokenShield.Observability.csproj" />
     <ProjectReference Include="..\..\src\TokenShield.Infrastructure\TokenShield.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\TokenShield.ProviderAdapters\TokenShield.ProviderAdapters.csproj" />
+    <ProjectReference Include="..\..\src\TokenShield.Api\TokenShield.Api.csproj" />
   </ItemGroup>
 
 </Project>
