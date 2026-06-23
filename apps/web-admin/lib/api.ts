@@ -17,8 +17,6 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_API === "true";
 
 // Helper to check if API is available, otherwise default to mock
-let apiHealthy = true;
-
 export async function safeFetch(path: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${path}`;
   const headers = new Headers(options.headers);
@@ -96,12 +94,7 @@ function requireString(value: string | undefined | null, fieldName: string): str
   return value.trim();
 }
 
-function requireNumber(value: number | undefined | null, fieldName: string): number {
-  if (value === undefined || value === null || Number.isNaN(value)) {
-    throw new Error(`${fieldName} is required`);
-  }
-  return value;
-}
+
 
 export const api = {
   // Providers

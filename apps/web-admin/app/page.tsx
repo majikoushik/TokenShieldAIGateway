@@ -9,7 +9,6 @@ import {
   ArrowRight,
   TrendingUp,
   Percent,
-  CheckCircle,
   HelpCircle
 } from "lucide-react";
 
