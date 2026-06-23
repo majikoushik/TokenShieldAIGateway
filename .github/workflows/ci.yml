@@ -13,7 +13,7 @@ concurrency:
 jobs:
   # ── Backend: Build & Test ──────────────────────────────────────────────────
   build-backend:
-    name: Backend (.NET 8)
+    name: Backend (.NET 10)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -76,3 +76,17 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:5000
+
+  # ── Docker Validation ──────────────────────────────────────────────────────
+  docker-validation:
+    name: Validate Docker Builds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build gateway-api image
+        run: docker build -t tokenshield/gateway-api:test apps/gateway-api
+
+      - name: Build web-admin image
+        run: docker build --build-arg NEXT_PUBLIC_API_URL=http://localhost:5000 -t tokenshield/web-admin:test apps/web-admin

@@ -1,9 +1,7 @@
 name: CD — Staging
 
-# Deploy to Azure Container Apps on push to main, or manually
+# Deploy to Azure Container Apps manually
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       imageTag:
