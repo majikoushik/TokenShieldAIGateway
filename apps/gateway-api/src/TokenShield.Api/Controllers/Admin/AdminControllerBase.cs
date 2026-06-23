@@ -37,14 +37,18 @@ public abstract class AdminControllerBase : ControllerBase
         // if (Guid.TryParse(claimTid, out var parsedTid)) { _tenantId = parsedTid; return parsedTid; }
 
         // 2. Local/Dev fallback to seeded demo tenant
-        var defaultTenant = await context.Tenants.FirstOrDefaultAsync();
-        if (defaultTenant != null)
+        var env = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>();
+        if (env.EnvironmentName == "Development")
         {
-            _tenantId = defaultTenant.Id;
-            return defaultTenant.Id;
+            var defaultTenant = await context.Tenants.FirstOrDefaultAsync();
+            if (defaultTenant != null)
+            {
+                _tenantId = defaultTenant.Id;
+                return defaultTenant.Id;
+            }
         }
 
-        throw new InvalidOperationException("Tenant context could not be resolved. Ensure database seeding has run.");
+        throw new UnauthorizedAccessException("Tenant context could not be resolved. Headers missing or not in Development mode.");
     }
 
     /// <summary>
@@ -62,6 +66,12 @@ public abstract class AdminControllerBase : ControllerBase
         // var emailClaim = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
         // if (!string.IsNullOrEmpty(emailClaim)) return emailClaim;
 
-        return "admin@tokenshield.local";
+        var env = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>();
+        if (env.EnvironmentName == "Development")
+        {
+            return "admin@tokenshield.local";
+        }
+
+        throw new UnauthorizedAccessException("Actor context could not be resolved. Headers missing or not in Development mode.");
     }
 }

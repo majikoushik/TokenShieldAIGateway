@@ -83,7 +83,7 @@ resource gatewayApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: 'false'   // Do not seed in production
             }
             {
-              name: 'Providers__UseRealProviders'
+              name: 'ProviderSettings__EnableRealCalls'
               value: 'false'   // Set to true when provider credentials are in Key Vault
             }
           ]

@@ -32,6 +32,22 @@ public class GlobalExceptionHandlingMiddleware
     private static Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         context.Response.ContentType = "application/json";
+
+        if (exception is UnauthorizedAccessException)
+        {
+            context.Response.StatusCode = (int)HttpStatusCode.Unauthorized;
+            var unauthResponse = new
+            {
+                error = new
+                {
+                    message = "Unauthorized access. " + exception.Message,
+                    type = "unauthorized",
+                    code = "401"
+                }
+            };
+            return context.Response.WriteAsync(JsonSerializer.Serialize(unauthResponse));
+        }
+
         context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
 
         var response = new

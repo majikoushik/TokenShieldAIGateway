@@ -6,8 +6,8 @@ Azure deployment foundation using [Azure Bicep](https://learn.microsoft.com/en-u
 
 ```
 Azure Container Apps Environment
-  ├── tokenshield-gateway   (gateway-api, port 5000, internal + external ingress)
-  └── tokenshield-webadmin  (web-admin, port 3000, external ingress)
+  |-- tokenshield-gateway   (gateway-api, port 5000, internal + external ingress)
+  `-- tokenshield-webadmin  (web-admin, port 3000, external ingress)
 
 Azure Database for PostgreSQL Flexible Server
 Azure Container Registry (ACR)
@@ -62,7 +62,7 @@ After initial deployment:
 | `AzureOpenAiApiKey` | Azure OpenAI key (if using Azure OpenAI) |
 | `AnthropicApiKey` | Anthropic Claude key (if using Anthropic) |
 
-The gateway-api Container App is granted Key Vault Secret Reader via Managed Identity — no credentials stored in app config.
+The gateway-api Container App is granted Key Vault Secret Reader via Managed Identity - no credentials stored in app config.
 
 ## Environment Variables
 
@@ -71,10 +71,10 @@ The gateway-api Container App is granted Key Vault Secret Reader via Managed Ide
 | `ConnectionStrings__DefaultConnection` | gateway-api | PostgreSQL connection string (auto-set by Bicep) |
 | `ApplicationInsights__ConnectionString` | gateway-api | Application Insights connection string (auto-set) |
 | `Cors__AllowedOrigins__0` | gateway-api | Web admin origin URL |
-| `Providers__UseRealProviders` | gateway-api | `true` to enable real LLM provider calls |
+| `ProviderSettings__EnableRealCalls` | gateway-api | `true` to enable real LLM provider calls |
 | `NEXT_PUBLIC_API_URL` | web-admin | Gateway API URL seen from browser |
 
 ## CI/CD
 
 See `.github/workflows/` for CI and CD pipelines.
-The CD pipeline uses OIDC federated credentials — no long-lived service principal secrets stored in GitHub.
+The CD pipeline uses OIDC federated credentials - no long-lived service principal secrets stored in GitHub.

@@ -168,7 +168,7 @@ app.MapControllers();
 
 // ─── Public Endpoints ──────────────────────────────────────────────────────
 
-// GET /health — lightweight liveness probe
+// GET /health - lightweight liveness probe
 app.MapGet("/health", () => Results.Ok(new
 {
     status = "Healthy",
@@ -180,7 +180,7 @@ app.MapGet("/health", () => Results.Ok(new
 .WithOpenApi()
 .AllowAnonymous();
 
-// GET /health/ready — readiness probe (includes database check)
+// GET /health/ready - readiness probe (includes database check)
 app.MapGet("/health/ready", async (Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService healthCheckService) =>
 {
     var report = await healthCheckService.CheckHealthAsync(reg => reg.Tags.Contains("ready"));
@@ -193,7 +193,7 @@ app.MapGet("/health/ready", async (Microsoft.Extensions.Diagnostics.HealthChecks
 .WithOpenApi()
 .AllowAnonymous();
 
-// GET /api/version — public version metadata
+// GET /api/version - public version metadata
 app.MapGet("/api/version", () => Results.Ok(new
 {
     productName = "TokenShield AI Gateway",
@@ -218,3 +218,5 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+public partial class Program { }

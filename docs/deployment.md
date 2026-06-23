@@ -58,6 +58,9 @@ docker compose down -v        # Stop + remove PostgreSQL data volume
 
 ## Azure Deployment (Bicep)
 
+> [!WARNING]
+> **IaC Networking Status**: Public network access for PostgreSQL, Key Vault, and Monitoring has been deliberately disabled to harden the infrastructure for portfolio review. However, the subsequent required **Private Networking / VNet integration** for Container Apps has not been fully implemented or validated. Deployments using these Bicep files may fail to interconnect in Azure until VNet integration is completed and tested.
+
 ### Prerequisites
 
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) ≥ 2.58
@@ -143,21 +146,21 @@ curl "$GATEWAY_URL/health/ready"
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `ConnectionStrings__DefaultConnection` | ✅ | — | PostgreSQL connection string |
-| `ASPNETCORE_ENVIRONMENT` | — | `Development` | `Development` or `Production` |
-| `SeedDatabase` | — | `true` | Set to `false` in production |
-| `ApplicationInsights__ConnectionString` | — | _(blank)_ | Enables cloud telemetry when set |
-| `OpenTelemetry__ServiceName` | — | `tokenshield-gateway` | Service name in traces |
-| `Cors__AllowedOrigins__0` | — | — | Allowed origin (Production CORS) |
-| `Providers__UseRealProviders` | — | `false` | Enable real LLM provider calls |
+| `ConnectionStrings__DefaultConnection` | ✅ | - | PostgreSQL connection string |
+| `ASPNETCORE_ENVIRONMENT` | - | `Development` | `Development` or `Production` |
+| `SeedDatabase` | - | `true` | Set to `false` in production |
+| `ApplicationInsights__ConnectionString` | - | _(blank)_ | Enables cloud telemetry when set |
+| `OpenTelemetry__ServiceName` | - | `tokenshield-gateway` | Service name in traces |
+| `Cors__AllowedOrigins__0` | - | - | Allowed origin (Production CORS) |
+| `ProviderSettings__EnableRealCalls` | - | `false` | Enable real LLM provider calls |
 
 ### web-admin
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `NEXT_PUBLIC_API_URL` | ✅ | `http://localhost:5000` | Gateway API base URL |
-| `NODE_ENV` | — | `production` | Node environment |
-| `PORT` | — | `3000` | HTTP port |
+| `NODE_ENV` | - | `production` | Node environment |
+| `PORT` | - | `3000` | HTTP port |
 
 ---
 

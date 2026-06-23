@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, prefer-const */
 import { 
   BudgetScope, 
   BudgetActionType, 
@@ -15,7 +14,7 @@ import {
 } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_API === "true";
 
 // Helper to check if API is available, otherwise default to mock
 let apiHealthy = true;
@@ -25,7 +24,7 @@ async function safeFetch(path: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers);
   
   // x-user-email identifies the actor for audit log purposes in MVP mode.
-  // x-tenant-id is NOT set here — the backend resolves it from the seeded demo tenant.
+  // x-tenant-id is NOT set here - the backend resolves it from the seeded demo tenant.
   // In production this will be replaced by Azure Entra ID claims.
   if (!headers.has("x-user-email")) {
     headers.set("x-user-email", "admin@tokenshield.local");
@@ -35,7 +34,7 @@ async function safeFetch(path: string, options: RequestInit = {}) {
   try {
     const res = await fetch(url, { ...options, headers });
     if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
+      const errBody = await res.json();
       throw new Error(errBody.error || errBody.errors?.join(", ") || `HTTP error ${res.status}`);
     }
     if (res.status === 204) {
@@ -43,7 +42,7 @@ async function safeFetch(path: string, options: RequestInit = {}) {
     }
     return await res.json();
   } catch (error) {
-    console.warn(`API call to ${path} failed, falling back to mock data:`, error);
+    console.error(`API call to ${path} failed:`, error);
     throw error;
   }
 }
@@ -92,13 +91,13 @@ export const api = {
   // Providers
   async getProviders() {
     if (USE_MOCK) return MOCK_DATA.providers;
-    return safeFetch("/api/admin/providers").catch(() => MOCK_DATA.providers);
+    return safeFetch("/api/admin/providers");
   },
   async getProvider(id: string) {
     if (USE_MOCK) return MOCK_DATA.providers.find(p => p.id === id);
-    return safeFetch(`/api/admin/providers/${id}`).catch(() => MOCK_DATA.providers.find(p => p.id === id));
+    return safeFetch(`/api/admin/providers/${id}`);
   },
-  async createProvider(data: any) {
+  async createProvider(data: Partial<Provider>) {
     if (USE_MOCK) {
       const newProvider = { id: `p-${Date.now()}`, ...data, createdAtUtc: new Date().toISOString() };
       MOCK_DATA.providers.push(newProvider);
@@ -106,7 +105,7 @@ export const api = {
     }
     return safeFetch("/api/admin/providers", { method: "POST", body: JSON.stringify(data) });
   },
-  async updateProvider(id: string, data: any) {
+  async updateProvider(id: string, data: Partial<Provider>) {
     if (USE_MOCK) {
       const providerIdx = MOCK_DATA.providers.findIndex(p => p.id === id);
       if (providerIdx !== -1) {
@@ -130,13 +129,13 @@ export const api = {
   // Models
   async getModels() {
     if (USE_MOCK) return MOCK_DATA.models;
-    return safeFetch("/api/admin/models").catch(() => MOCK_DATA.models);
+    return safeFetch("/api/admin/models");
   },
   async getModel(id: string) {
     if (USE_MOCK) return MOCK_DATA.models.find(m => m.id === id);
-    return safeFetch(`/api/admin/models/${id}`).catch(() => MOCK_DATA.models.find(m => m.id === id));
+    return safeFetch(`/api/admin/models/${id}`);
   },
-  async createModel(data: any) {
+  async createModel(data: Partial<AiModel>) {
     if (USE_MOCK) {
       const provider = MOCK_DATA.providers.find(p => p.id === data.providerId);
       const newModel = { id: `m-${Date.now()}`, providerName: provider?.name || "Mock", ...data, createdAtUtc: new Date().toISOString() };
@@ -145,7 +144,7 @@ export const api = {
     }
     return safeFetch("/api/admin/models", { method: "POST", body: JSON.stringify(data) });
   },
-  async updateModel(id: string, data: any) {
+  async updateModel(id: string, data: Partial<AiModel>) {
     if (USE_MOCK) {
       const idx = MOCK_DATA.models.findIndex(m => m.id === id);
       if (idx !== -1) {
@@ -169,13 +168,13 @@ export const api = {
   // Routing Rules
   async getRules() {
     if (USE_MOCK) return MOCK_DATA.rules;
-    return safeFetch("/api/admin/routing-rules").catch(() => MOCK_DATA.rules);
+    return safeFetch("/api/admin/routing-rules");
   },
   async getRule(id: string) {
     if (USE_MOCK) return MOCK_DATA.rules.find(r => r.id === id);
-    return safeFetch(`/api/admin/routing-rules/${id}`).catch(() => MOCK_DATA.rules.find(r => r.id === id));
+    return safeFetch(`/api/admin/routing-rules/${id}`);
   },
-  async createRule(data: any) {
+  async createRule(data: Partial<RoutingRule>) {
     if (USE_MOCK) {
       const newRule = { id: `r-${Date.now()}`, ...data, createdAtUtc: new Date().toISOString() };
       MOCK_DATA.rules.push(newRule);
@@ -183,7 +182,7 @@ export const api = {
     }
     return safeFetch("/api/admin/routing-rules", { method: "POST", body: JSON.stringify(data) });
   },
-  async updateRule(id: string, data: any) {
+  async updateRule(id: string, data: Partial<RoutingRule>) {
     if (USE_MOCK) {
       const idx = MOCK_DATA.rules.findIndex(r => r.id === id);
       if (idx !== -1) {
@@ -207,13 +206,13 @@ export const api = {
   // Budgets
   async getBudgets() {
     if (USE_MOCK) return MOCK_DATA.budgets;
-    return safeFetch("/api/admin/budgets").catch(() => MOCK_DATA.budgets);
+    return safeFetch("/api/admin/budgets");
   },
   async getBudget(id: string) {
     if (USE_MOCK) return MOCK_DATA.budgets.find(b => b.id === id);
-    return safeFetch(`/api/admin/budgets/${id}`).catch(() => MOCK_DATA.budgets.find(b => b.id === id));
+    return safeFetch(`/api/admin/budgets/${id}`);
   },
-  async createBudget(data: any) {
+  async createBudget(data: Partial<BudgetLimit>) {
     if (USE_MOCK) {
       let targetName = "Acme Developer Portal";
       if (data.scope === BudgetScope.Model) targetName = "mock-cheap";
@@ -223,7 +222,7 @@ export const api = {
     }
     return safeFetch("/api/admin/budgets", { method: "POST", body: JSON.stringify(data) });
   },
-  async updateBudget(id: string, data: any) {
+  async updateBudget(id: string, data: Partial<BudgetLimit>) {
     if (USE_MOCK) {
       const idx = MOCK_DATA.budgets.findIndex(b => b.id === id);
       if (idx !== -1) {
@@ -247,9 +246,9 @@ export const api = {
   // API Keys
   async getApiKeys() {
     if (USE_MOCK) return MOCK_DATA.apiKeys;
-    return safeFetch("/api/admin/api-keys").catch(() => MOCK_DATA.apiKeys);
+    return safeFetch("/api/admin/api-keys");
   },
-  async createApiKey(data: any) {
+  async createApiKey(data: Partial<ApiKey>) {
     if (USE_MOCK) {
       const app = MOCK_DATA.applications.find(a => a.id === data.clientApplicationId);
       const newKey = {
@@ -306,7 +305,7 @@ export const api = {
     Object.entries(filters).forEach(([key, val]) => {
       if (val !== undefined && val !== "") params.append(key, val.toString());
     });
-    return safeFetch(`/api/admin/usage-analytics/logs?${params.toString()}`).catch(() => MOCK_DATA.usageLogs);
+    return safeFetch(`/api/admin/usage-analytics/logs?${params.toString()}`);
   },
 
   async getUsageSummary(filters: Record<string, string | undefined> = {}) {
@@ -317,7 +316,7 @@ export const api = {
     Object.entries(filters).forEach(([key, val]) => {
       if (val !== undefined && val !== "") params.append(key, val.toString());
     });
-    return safeFetch(`/api/admin/usage-analytics/summary?${params.toString()}`).catch(() => this.getMockSummary());
+    return safeFetch(`/api/admin/usage-analytics/summary?${params.toString()}`);
   },
 
   // Audit Logs
@@ -329,7 +328,7 @@ export const api = {
     Object.entries(filters).forEach(([key, val]) => {
       if (val !== undefined && val !== "") params.append(key, val.toString());
     });
-    return safeFetch(`/api/admin/audit-logs?${params.toString()}`).catch(() => MOCK_DATA.auditLogs);
+    return safeFetch(`/api/admin/audit-logs?${params.toString()}`);
   },
 
   // Settings / Applications
@@ -342,20 +341,15 @@ export const api = {
         routingActions: ["routetotier", "humanreview", "block"]
       };
     }
-    return safeFetch("/api/admin/settings/catalog").catch(() => ({
-      tiers: ["cheap", "standard", "premium"],
-      budgetScopes: ["tenant", "application", "apikey", "model"],
-      budgetActions: ["warnonly", "block", "downgrade"],
-      routingActions: ["routetotier", "humanreview", "block"]
-    }));
+    return safeFetch("/api/admin/settings/catalog");
   },
 
   async getApplications() {
     if (USE_MOCK) return MOCK_DATA.applications;
-    return safeFetch("/api/admin/settings/applications").catch(() => MOCK_DATA.applications);
+    return safeFetch("/api/admin/settings/applications");
   },
 
-  async createApplication(data: any) {
+  async createApplication(data: Partial<ClientApplication>) {
     if (USE_MOCK) {
       const newApp = { id: `app-${Date.now()}`, ...data, createdAtUtc: new Date().toISOString() };
       MOCK_DATA.applications.push(newApp);

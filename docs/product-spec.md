@@ -74,7 +74,7 @@ Monthly financial limits configured with three distinct enforcement options:
 ## 4. Lifecycle of a Request
 ```text
 [Client App] ──> [API Authentication] ──> [Request Profiler] ──> [Budget Check]
-                                                                        │
+                                                                        |
 [OpenAI Response] <── [Usage Log] <── [Provider Call] <── [Routing Rules]
 ```
 

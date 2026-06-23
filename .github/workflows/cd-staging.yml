@@ -50,12 +50,8 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # ── Build & Push: gateway-api ──────────────────────────────────────────
-      - name: Build and push gateway-api image
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ secrets.ACR_NAME }}.azurecr.io
-          username: ${{ secrets.AZURE_CLIENT_ID }}
-          password: ${{ secrets.AZURE_CLIENT_ID }}  # OIDC-based — no password needed
+      - name: ACR Login
+        run: az acr login --name ${{ secrets.ACR_NAME }}
 
       - name: Build gateway-api Docker image
         run: |
@@ -66,7 +62,6 @@ jobs:
 
       - name: Push gateway-api image
         run: |
-          az acr login --name ${{ secrets.ACR_NAME }}
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/gateway-api:${{ env.IMAGE_TAG }}
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/tokenshield/gateway-api:latest
 

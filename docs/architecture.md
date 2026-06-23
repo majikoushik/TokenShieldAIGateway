@@ -5,21 +5,21 @@ TokenShield AI Gateway acts as a reverse proxy sitting between client applicatio
 
 ```text
        ┌──────────────────────┐
-       │  Client Application  │
-       └──────────┬───────────┘
-                  │ HTTPS POST /v1/chat/completions (x-api-key)
+       |  Client Application  |
+       `--────────┬───────────┘
+                  | HTTPS POST /v1/chat/completions (x-api-key)
                   ▼
        ┌──────────────────────┐
-       │TokenShield Gateway   │
-       │ (ASP.NET Core API)   │
-       └────┬────────────┬────┘
-            │            │
-            │ EF Core    │ HTTPS REST
+       |TokenShield Gateway   |
+       | (ASP.NET Core API)   |
+       `--──┬────────────┬────┘
+            |            |
+            | EF Core    | HTTPS REST
             ▼            ▼
    ┌───────────┐    ┌───────────────────────────────────┐
-   │PostgreSQL │    │ Downstream AI Providers           │
-   │ Database  │    │ (Azure OpenAI / OpenAI / Anthropic)│
-   └───────────┘    └───────────────────────────────────┘
+   |PostgreSQL |    | Downstream AI Providers           |
+   | Database  |    | (Azure OpenAI / OpenAI / Anthropic)|
+   `--─────────┘    `--─────────────────────────────────┘
 ```
 
 ---
@@ -29,15 +29,15 @@ The backend is structured into domain-isolated layers, conforming to Domain-Driv
 
 ```text
    TokenShield.Api (HTTP endpoint handlers, middleware, swagger)
-          │
+          |
           ▼
    TokenShield.Application (Use cases, orchestrators, interface definitions)
     ┌─────┴──────────────────────────────────────────────────────┐
-    │                                                            │
+    |                                                            |
     ▼                                                            ▼
    TokenShield.Domain (Entities, value objects, core exceptions)  TokenShield.ProviderAdapters
     ▲                                                            (SDK adapters for models)
-    │
+    |
     ├─ TokenShield.Infrastructure (EF Core DbContext, Migrations)
     ├─ TokenShield.PolicyEngine (Rule-matching evaluations)
     ├─ TokenShield.CostEngine (Token estimators, cost engine helpers)

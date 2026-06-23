@@ -13,7 +13,7 @@ param databaseName string = 'tokenshield'
 @description('PostgreSQL version')
 param postgresVersion string = '16'
 
-@description('SKU name — use Standard_D2ds_v4 for production')
+@description('SKU name - use Standard_D2ds_v4 for production')
 param skuName string = 'Standard_B2ms'
 
 resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview' = {
@@ -53,15 +53,8 @@ resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-12-0
   }
 }
 
-// Allow Azure services (Container Apps) to connect — restrict to VNet in production
-resource firewallAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-12-01-preview' = {
-  parent: postgresServer
-  name: 'AllowAllAzureServices'
-  properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0'
-  }
-}
+// AllowAllAzureServices has been intentionally removed to harden public access.
+// In a production scenario, Private Endpoints (VNet integration) must be used instead.
 
 output serverFqdn string = postgresServer.properties.fullyQualifiedDomainName
 output serverId string = postgresServer.id

@@ -1,4 +1,4 @@
-# TokenShield AI Gateway — Epic-Based Codex Prompt Pack
+# TokenShield AI Gateway - Epic-Based Codex Prompt Pack
 
 Use these prompts after placing the updated `AGENTS.md` in the repository root and, ideally, in your coding tool's global project rules.
 
@@ -14,7 +14,7 @@ Recommended use:
 
 ---
 
-## Epic 1 — Product and Repository Foundation
+## Epic 1 - Product and Repository Foundation
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -73,7 +73,7 @@ At completion, report:
 
 ---
 
-## Epic 2 — Backend Persistence and Seed Foundation
+## Epic 2 - Backend Persistence and Seed Foundation
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -140,7 +140,7 @@ At completion, report:
 
 ---
 
-## Epic 3 — Gateway Core Vertical Slice
+## Epic 3 - Gateway Core Vertical Slice
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -201,7 +201,7 @@ At completion, report:
 
 ---
 
-## Epic 4 — Routing, Profiling, and Cost Vertical Slice
+## Epic 4 - Routing, Profiling, and Cost Vertical Slice
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -253,7 +253,7 @@ At completion, report:
 
 ---
 
-## Epic 5 — Budget, Usage, and Audit Governance Vertical Slice
+## Epic 5 - Budget, Usage, and Audit Governance Vertical Slice
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -307,7 +307,7 @@ At completion, report:
 
 ---
 
-## Epic 6 — Provider Integration and Fallback Vertical Slice
+## Epic 6 - Provider Integration and Fallback Vertical Slice
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -362,7 +362,7 @@ At completion, report:
 
 ---
 
-## Epic 7 — Admin API Vertical Slice
+## Epic 7 - Admin API Vertical Slice
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -425,7 +425,7 @@ At completion, report:
 
 ---
 
-## Epic 8 — Frontend Admin Console Vertical Slice
+## Epic 8 - Frontend Admin Console Vertical Slice
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -485,7 +485,7 @@ At completion, report:
 
 ---
 
-## Epic 9 — Production Readiness Vertical Slice
+## Epic 9 - Production Readiness Vertical Slice
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -538,7 +538,7 @@ At completion, report:
 
 ---
 
-## Epic 10 — Final MVP Verification and Hardening
+## Epic 10 - Final MVP Verification and Hardening
 
 ```text
 You are working on TokenShield AI Gateway.
@@ -610,7 +610,7 @@ At completion, report:
 
 ---
 
-# Optional Post-MVP Prompt — Roadmap Planning
+# Optional Post-MVP Prompt - Roadmap Planning
 
 ```text
 You are working on TokenShield AI Gateway.

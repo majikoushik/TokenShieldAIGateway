@@ -177,35 +177,35 @@ Use this structure unless the existing repository already has an equivalent stru
 
 ```text
 /
-├── apps/
-│   ├── gateway-api/
-│   └── web-admin/
-│
-├── docs/
-│   ├── product-spec.md
-│   ├── architecture.md
-│   ├── database-schema.md
-│   ├── gateway-api.md
-│   ├── routing-rules.md
-│   ├── cost-engine.md
-│   ├── provider-adapters.md
-│   ├── budget-enforcement.md
-│   ├── admin-api.md
-│   ├── frontend-admin-console.md
-│   ├── observability.md
-│   └── deployment.md
-│
-├── infra/
-│   ├── bicep/
-│   ├── docker/
-│   └── README.md
-│
-├── scripts/
-├── .github/
-│   └── workflows/
-├── AGENTS.md
-├── docker-compose.yml
-└── README.md
+|-- apps/
+|   |-- gateway-api/
+|   `-- web-admin/
+|
+|-- docs/
+|   |-- product-spec.md
+|   |-- architecture.md
+|   |-- database-schema.md
+|   |-- gateway-api.md
+|   |-- routing-rules.md
+|   |-- cost-engine.md
+|   |-- provider-adapters.md
+|   |-- budget-enforcement.md
+|   |-- admin-api.md
+|   |-- frontend-admin-console.md
+|   |-- observability.md
+|   `-- deployment.md
+|
+|-- infra/
+|   |-- bicep/
+|   |-- docker/
+|   `-- README.md
+|
+|-- scripts/
+|-- .github/
+|   `-- workflows/
+|-- AGENTS.md
+|-- docker-compose.yml
+`-- README.md
 ```
 
 ---
@@ -218,20 +218,20 @@ Recommended backend structure:
 
 ```text
 apps/gateway-api/
-├── src/
-│   ├── TokenShield.Api/
-│   ├── TokenShield.Domain/
-│   ├── TokenShield.Application/
-│   ├── TokenShield.Infrastructure/
-│   ├── TokenShield.ProviderAdapters/
-│   ├── TokenShield.PolicyEngine/
-│   ├── TokenShield.CostEngine/
-│   ├── TokenShield.Guardrails/
-│   └── TokenShield.Observability/
-│
-└── tests/
-    ├── TokenShield.UnitTests/
-    └── TokenShield.IntegrationTests/
+|-- src/
+|   |-- TokenShield.Api/
+|   |-- TokenShield.Domain/
+|   |-- TokenShield.Application/
+|   |-- TokenShield.Infrastructure/
+|   |-- TokenShield.ProviderAdapters/
+|   |-- TokenShield.PolicyEngine/
+|   |-- TokenShield.CostEngine/
+|   |-- TokenShield.Guardrails/
+|   `-- TokenShield.Observability/
+|
+`-- tests/
+    |-- TokenShield.UnitTests/
+    `-- TokenShield.IntegrationTests/
 ```
 
 ### Layer Responsibilities
@@ -347,29 +347,29 @@ Recommended structure:
 
 ```text
 apps/web-admin/
-├── app/
-├── components/
-│   ├── layout/
-│   ├── dashboard/
-│   ├── providers/
-│   ├── models/
-│   ├── routing-rules/
-│   ├── budgets/
-│   ├── api-keys/
-│   ├── usage-logs/
-│   ├── audit-logs/
-│   └── shared/
-│
-├── lib/
-│   ├── api/
-│   ├── auth/
-│   ├── constants/
-│   ├── mock/
-│   └── utils/
-│
-├── hooks/
-├── types/
-└── styles/
+|-- app/
+|-- components/
+|   |-- layout/
+|   |-- dashboard/
+|   |-- providers/
+|   |-- models/
+|   |-- routing-rules/
+|   |-- budgets/
+|   |-- api-keys/
+|   |-- usage-logs/
+|   |-- audit-logs/
+|   `-- shared/
+|
+|-- lib/
+|   |-- api/
+|   |-- auth/
+|   |-- constants/
+|   |-- mock/
+|   `-- utils/
+|
+|-- hooks/
+|-- types/
+`-- styles/
 ```
 
 Required MVP pages:

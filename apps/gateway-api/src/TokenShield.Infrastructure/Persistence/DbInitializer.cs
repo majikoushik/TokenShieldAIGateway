@@ -90,7 +90,8 @@ public static class DbInitializer
             };
             context.ApiKeys.Add(apiKey);
             await context.SaveChangesAsync();
-            logger.LogInformation("Seeded API Key: {KeyName} (Raw key: '{RawKey}')", apiKey.Name, rawKey);
+            var maskedKey = $"{apiKey.Prefix}***{rawKey.Substring(rawKey.Length - 4)}";
+            logger.LogInformation("Seeded API Key: {KeyName} (Masked: '{MaskedKey}')", apiKey.Name, maskedKey);
         }
 
         // 4. Seed Providers

@@ -104,8 +104,8 @@ When the connection string is set, traces, metrics, and logs automatically flow 
 
 | Endpoint | Auth | Purpose |
 |---|---|---|
-| `GET /health` | Public | Liveness probe — confirms process is alive |
-| `GET /health/ready` | Public | Readiness probe — confirms database connectivity |
+| `GET /health` | Public | Liveness probe - confirms process is alive |
+| `GET /health/ready` | Public | Readiness probe - confirms database connectivity |
 
 The readiness endpoint returns HTTP 200 when the database check passes, HTTP 503 otherwise.
 

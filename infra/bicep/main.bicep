@@ -1,4 +1,4 @@
-// TokenShield AI Gateway — Azure Bicep Main Orchestration
+// TokenShield AI Gateway - Azure Bicep Main Orchestration
 // Deploys: Container Apps Environment, PostgreSQL Flexible Server,
 //          Key Vault, Application Insights, Log Analytics, Container Registry
 
@@ -17,7 +17,7 @@ param environment string = 'dev'
 @description('PostgreSQL administrator login')
 param dbAdminLogin string = 'tsadmin'
 
-@description('PostgreSQL administrator password — use a Key Vault reference in production')
+@description('PostgreSQL administrator password - use a Key Vault reference in production')
 @secure()
 param dbAdminPassword string
 

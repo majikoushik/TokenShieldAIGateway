@@ -5,7 +5,7 @@
 param location string
 param keyVaultName string
 
-@description('Object ID of the managed identity or user that needs secret access (optional — can be added post-deploy)')
+@description('Object ID of the managed identity or user that needs secret access (optional - can be added post-deploy)')
 param secretReaderObjectId string = ''
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
@@ -20,7 +20,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true   // Use RBAC instead of access policies (recommended)
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
-    publicNetworkAccess: 'Enabled'  // Restrict to VNet in production
+    publicNetworkAccess: 'Disabled'  // Restrict to VNet in production
   }
 }
 

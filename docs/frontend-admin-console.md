@@ -57,8 +57,8 @@ The TokenShield Admin Console is a modern SaaS portal designed for operators, ad
 
 The API client helper is defined in `lib/api.ts`.
 
-### Automatic Mock Failover
-If the backend Web API is offline or returns connection errors:
-1. `lib/api.ts` outputs a console warning: `API call to /api/admin/... failed, falling back to mock data`.
-2. The UI falls back to high-fidelity mock seed data (`MOCK_DATA`) so the portal remains operational for reviews and local validations.
-3. This allows seamless local development when the gateway engine is not running locally.
+### Mock Data Fallback (`NEXT_PUBLIC_USE_MOCK_API`)
+By default, the application will connect to the real Web API. If the `NEXT_PUBLIC_USE_MOCK_API=true` environment variable is set during build or runtime:
+1. `lib/api.ts` bypasses all backend fetch calls entirely.
+2. The UI renders high-fidelity mock seed data (`MOCK_DATA`) so the portal remains operational for UI reviews and local validations.
+3. If this variable is false (default) and the backend is offline, the API client correctly propagates HTTP connection errors to the UI, avoiding silent and misleading mock fallbacks.

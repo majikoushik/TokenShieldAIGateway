@@ -37,7 +37,7 @@ public static class ObservabilityExtensions
         if (hasAppInsights)
         {
             // Azure Monitor distro: single call wires traces, metrics, and logs
-            // to Application Insights — no manual exporter registration needed.
+            // to Application Insights - no manual exporter registration needed.
             services.AddOpenTelemetry()
                 .UseAzureMonitor(opts =>
                 {
