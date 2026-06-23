@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy all project files to cache NuGet restore
@@ -20,7 +20,7 @@ COPY src/ src/
 RUN dotnet publish src/TokenShield.Api/TokenShield.Api.csproj -c Release -o /app/publish --no-restore
 
 # Final runtime image — use curl-enabled image for healthcheck
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 # Install curl for HEALTHCHECK (minimal footprint)
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*

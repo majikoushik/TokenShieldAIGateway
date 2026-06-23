@@ -177,7 +177,6 @@ app.MapGet("/health", () => Results.Ok(new
 }))
 .WithName("HealthLiveness")
 .WithTags("Health")
-.WithOpenApi()
 .AllowAnonymous();
 
 // GET /health/ready - readiness probe (includes database check)
@@ -190,7 +189,6 @@ app.MapGet("/health/ready", async (Microsoft.Extensions.Diagnostics.HealthChecks
 })
 .WithName("HealthReadiness")
 .WithTags("Health")
-.WithOpenApi()
 .AllowAnonymous();
 
 // GET /api/version - public version metadata
@@ -202,8 +200,7 @@ app.MapGet("/api/version", () => Results.Ok(new
     serverTime = DateTime.UtcNow
 }))
 .WithName("GetVersion")
-.WithTags("System")
-.WithOpenApi();
+.WithTags("System");
 
 try
 {
