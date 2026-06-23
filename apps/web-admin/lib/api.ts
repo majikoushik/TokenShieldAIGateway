@@ -19,7 +19,7 @@ const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_API === "true";
 // Helper to check if API is available, otherwise default to mock
 let apiHealthy = true;
 
-async function safeFetch(path: string, options: RequestInit = {}) {
+export async function safeFetch(path: string, options: RequestInit = {}) {
   const url = `${API_BASE_URL}${path}`;
   const headers = new Headers(options.headers);
   
@@ -87,6 +87,22 @@ export const MOCK_DATA = {
   ] as AuditLog[]
 };
 
+const nowUtc = () => new Date().toISOString();
+
+function requireString(value: string | undefined | null, fieldName: string): string {
+  if (!value || value.trim().length === 0) {
+    throw new Error(`${fieldName} is required`);
+  }
+  return value.trim();
+}
+
+function requireNumber(value: number | undefined | null, fieldName: string): number {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    throw new Error(`${fieldName} is required`);
+  }
+  return value;
+}
+
 export const api = {
   // Providers
   async getProviders() {
@@ -99,7 +115,15 @@ export const api = {
   },
   async createProvider(data: Partial<Provider>) {
     if (USE_MOCK) {
-      const newProvider = { id: `p-${Date.now()}`, ...data, createdAtUtc: new Date().toISOString() };
+      const newProvider: Provider = {
+        id: `p-${Date.now()}`,
+        name: requireString(data.name, "Provider name"),
+        apiUrl: data.apiUrl ?? "",
+        apiKeySecretRef: data.apiKeySecretRef ?? "",
+        isActive: data.isActive ?? true,
+        createdAtUtc: nowUtc(),
+        updatedAtUtc: nowUtc(),
+      };
       MOCK_DATA.providers.push(newProvider);
       return newProvider;
     }
@@ -138,7 +162,19 @@ export const api = {
   async createModel(data: Partial<AiModel>) {
     if (USE_MOCK) {
       const provider = MOCK_DATA.providers.find(p => p.id === data.providerId);
-      const newModel = { id: `m-${Date.now()}`, providerName: provider?.name || "Mock", ...data, createdAtUtc: new Date().toISOString() };
+      const newModel: AiModel = {
+        id: `m-${Date.now()}`,
+        providerId: requireString(data.providerId, "Provider ID"),
+        providerName: provider?.name || "Mock",
+        name: requireString(data.name, "Model name"),
+        deploymentName: data.deploymentName ?? "",
+        tier: data.tier ?? ModelTier.Standard,
+        inputTokenPricePerMillion: data.inputTokenPricePerMillion ?? 0,
+        outputTokenPricePerMillion: data.outputTokenPricePerMillion ?? 0,
+        contextWindow: data.contextWindow ?? 0,
+        isActive: data.isActive ?? true,
+        createdAtUtc: nowUtc()
+      };
       MOCK_DATA.models.push(newModel);
       return newModel;
     }
@@ -176,7 +212,16 @@ export const api = {
   },
   async createRule(data: Partial<RoutingRule>) {
     if (USE_MOCK) {
-      const newRule = { id: `r-${Date.now()}`, ...data, createdAtUtc: new Date().toISOString() };
+      const newRule: RoutingRule = {
+        id: `r-${Date.now()}`,
+        name: requireString(data.name, "Routing rule name"),
+        priority: data.priority ?? 100,
+        conditionsJson: data.conditionsJson ?? "{}",
+        action: data.action ?? RoutingActionType.RouteToTier,
+        targetTier: data.targetTier ?? null,
+        isActive: data.isActive ?? true,
+        createdAtUtc: nowUtc()
+      };
       MOCK_DATA.rules.push(newRule);
       return newRule;
     }
@@ -216,7 +261,18 @@ export const api = {
     if (USE_MOCK) {
       let targetName = "Acme Developer Portal";
       if (data.scope === BudgetScope.Model) targetName = "mock-cheap";
-      const newBudget = { id: `b-${Date.now()}`, targetName, currentSpend: 0, lastResetAtUtc: new Date().toISOString(), ...data, createdAtUtc: new Date().toISOString() };
+      const newBudget: BudgetLimit = {
+        id: `b-${Date.now()}`,
+        scope: data.scope ?? BudgetScope.Tenant,
+        targetId: data.targetId ?? null,
+        targetName: data.targetName ?? targetName,
+        monthlyLimit: data.monthlyLimit ?? 0,
+        warningThresholdPercent: data.warningThresholdPercent ?? 80,
+        currentSpend: data.currentSpend ?? 0,
+        action: data.action ?? BudgetActionType.WarnOnly,
+        lastResetAtUtc: data.lastResetAtUtc ?? nowUtc(),
+        createdAtUtc: nowUtc()
+      };
       MOCK_DATA.budgets.push(newBudget);
       return newBudget;
     }
@@ -253,12 +309,15 @@ export const api = {
       const app = MOCK_DATA.applications.find(a => a.id === data.clientApplicationId);
       const newKey = {
         id: `k-${Date.now()}`,
+        clientApplicationId: requireString(data.clientApplicationId, "Client application ID"),
         clientApplicationName: app?.name || "Acme Developer Portal",
-        prefix: data.prefix || "ts_live_",
-        rawKey: `${data.prefix || "ts_live_"}mockrawkey_${Math.random().toString(36).substring(2, 15)}_${Math.random().toString(36).substring(2, 15)}`,
+        name: requireString(data.name, "API Key name"),
+        prefix: data.prefix ?? "ts_live_",
+        rawKey: `${data.prefix ?? "ts_live_"}mockrawkey_${Math.random().toString(36).substring(2, 15)}_${Math.random().toString(36).substring(2, 15)}`,
+        lastUsedAtUtc: null,
+        expiresAtUtc: data.expiresAtUtc ?? null,
         isRevoked: false,
-        createdAtUtc: new Date().toISOString(),
-        ...data
+        createdAtUtc: nowUtc()
       };
       MOCK_DATA.apiKeys.push({
         id: newKey.id,
@@ -266,9 +325,9 @@ export const api = {
         clientApplicationName: newKey.clientApplicationName,
         name: newKey.name,
         prefix: newKey.prefix,
-        lastUsedAtUtc: null,
+        lastUsedAtUtc: newKey.lastUsedAtUtc,
         expiresAtUtc: newKey.expiresAtUtc,
-        isRevoked: false,
+        isRevoked: newKey.isRevoked,
         createdAtUtc: newKey.createdAtUtc
       });
       return newKey;
@@ -351,7 +410,11 @@ export const api = {
 
   async createApplication(data: Partial<ClientApplication>) {
     if (USE_MOCK) {
-      const newApp = { id: `app-${Date.now()}`, ...data, createdAtUtc: new Date().toISOString() };
+      const newApp: ClientApplication = {
+        id: `app-${Date.now()}`,
+        name: requireString(data.name, "Client application name"),
+        createdAtUtc: nowUtc()
+      };
       MOCK_DATA.applications.push(newApp);
       return newApp;
     }

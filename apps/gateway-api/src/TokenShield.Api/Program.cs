@@ -160,7 +160,14 @@ if (app.Environment.IsDevelopment())
 }
 
 // Apply pending EF Core migrations and optionally seed data
-await DbInitializer.InitializeAsync(app.Services, seedEnabled);
+var skipDbInitializer = 
+    app.Environment.IsEnvironment("Testing") || 
+    app.Configuration.GetValue<bool>("SkipDbInitializer");
+
+if (!skipDbInitializer)
+{
+    await DbInitializer.InitializeAsync(app.Services, seedEnabled);
+}
 
 app.UseHttpsRedirection();
 app.UseCors("GatewayPolicy");

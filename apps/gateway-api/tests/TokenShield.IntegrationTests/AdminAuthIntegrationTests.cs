@@ -6,11 +6,11 @@ using Microsoft.AspNetCore.Hosting;
 
 namespace TokenShield.IntegrationTests;
 
-public class AdminAuthIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+public class AdminAuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly CustomWebApplicationFactory _factory;
 
-    public AdminAuthIntegrationTests(WebApplicationFactory<Program> factory)
+    public AdminAuthIntegrationTests(CustomWebApplicationFactory factory)
     {
         // Use the default factory. By default, WebApplicationFactory uses "Development" environment.
         // We will override it to "Production" to test the hardened behavior.
@@ -20,8 +20,14 @@ public class AdminAuthIntegrationTests : IClassFixture<WebApplicationFactory<Pro
     [Fact]
     public async Task AdminApi_WithoutHeaders_InDevelopment_ReturnsOkOrUnauthorized()
     {
-        // Default WebApplicationFactory environment is "Development".
-        var client = _factory.CreateClient();
+        // We override the test factory environment to "Development" just for this test,
+        // because the fallback logic specifically checks for "Development".
+        var devFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Development");
+        });
+
+        var client = devFactory.CreateClient();
 
         // /api/admin/providers should work or return unauthorized depending on other auth, 
         // but it shouldn't throw the 500 InvalidOperationException from missing tenant context.
